@@ -6,12 +6,12 @@ import requests
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
 
-from livejobs import cli, db, inventory, metrics, migrations
-from livejobs.api import app
-from livejobs.orm import Board, InventoryRun, Job
-from livejobs.services import ServiceError, boards, sync
-from livejobs.vendors import VENDORS
-from livejobs.vendors.base import BoardGone
+from jobmcp import cli, db, inventory, metrics, migrations
+from jobmcp.api import app
+from jobmcp.orm import Board, InventoryRun, Job
+from jobmcp.services import ServiceError, boards, sync
+from jobmcp.vendors import VENDORS
+from jobmcp.vendors.base import BoardGone
 
 from .helpers import fj, mk_board, mk_user
 
@@ -233,7 +233,7 @@ def test_an_mcp_token_cannot_add_boards(c, fake_platform):
         json={"vendor": "greenhouse", "slug": "stripe"},
     )
     assert r.status_code == 401
-    from livejobs import mcp_server
+    from jobmcp import mcp_server
 
     assert not any(
         "board" in t
@@ -714,11 +714,11 @@ def test_upgrade_marks_pre_existing_hand_added_boards_manual():
 
 def test_metrics_expose_inventory_and_board_sources(fake_platform):
     c = TestClient(
-        __import__("livejobs.site", fromlist=["app"]).app,
+        __import__("jobmcp.site", fromlist=["app"]).app,
         client=("127.0.0.1", 1),
     )
     assert (
-        "livejobs_inventory_last_success_timestamp_seconds 0.0"
+        "jobmcp_inventory_last_success_timestamp_seconds 0.0"
         in c.get("/metrics").text
     )  # never run
     refresh("CC-MAIN-2026-43", Crawl())
@@ -726,20 +726,16 @@ def test_metrics_expose_inventory_and_board_sources(fake_platform):
         boards.add_board(s, "greenhouse", "mine", enable=True)
     metrics.collector.reset()
     t = c.get("/metrics").text
-    assert (
-        'livejobs_boards_by_source{source="manual",status="enabled"} 1.0' in t
-    )
-    assert (
-        'livejobs_boards_by_source{source="crawl",status="enabled"} 4.0' in t
-    )
-    assert 'livejobs_inventory_runs_total{status="complete"} 1.0' in t
-    assert "livejobs_inventory_boards_new_total 4.0" in t
+    assert 'jobmcp_boards_by_source{source="manual",status="enabled"} 1.0' in t
+    assert 'jobmcp_boards_by_source{source="crawl",status="enabled"} 4.0' in t
+    assert 'jobmcp_inventory_runs_total{status="complete"} 1.0' in t
+    assert "jobmcp_inventory_boards_new_total 4.0" in t
     ts = float(
         next(
             line
             for line in t.splitlines()
             if line.startswith(
-                "livejobs_inventory_last_success_timestamp_seconds "
+                "jobmcp_inventory_last_success_timestamp_seconds "
             )
         ).split()[1]
     )
@@ -886,7 +882,7 @@ def test_add_many_works_in_chunks_so_memory_stays_flat(monkeypatch):
 
 def test_boards_list_sorts_by_name_status_jobs_and_last_synced(c, admin):
     from datetime import timedelta
-    from livejobs.orm import utcnow
+    from jobmcp.orm import utcnow
 
     now = utcnow()
     with db.session() as s:

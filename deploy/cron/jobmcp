@@ -1,0 +1,14 @@
+# /etc/cron.d/jobmcp : fetch the latest job posts every hour.
+# (Use this OR the jobmcp-sync.timer systemd unit, not both. Running both is harmless but pointless.)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# min hour dom mon dow  user      command
+0     *    *   *   *    jobmcp  /opt/jobmcp/deploy/bin/jobmcp-cron-sync.sh >> /var/log/jobmcp/sync.log 2>&1
+
+# Refresh the board inventory from Common Crawl, once a month. Runs daily on the 5th to the 12th at 03:00; the first
+# run that finds a new crawl ingests it, later ones do nothing (or finish pages an earlier run missed).
+0     3    5-12 * *  jobmcp  /opt/jobmcp/deploy/bin/jobmcp-cron-inventory.sh >> /var/log/jobmcp/inventory.log 2>&1
+
+# Nightly database backup at 03:15 (see deploy/bin/jobmcp-backup.sh)
+15    3    *   *   *    jobmcp  /opt/jobmcp/deploy/bin/jobmcp-backup.sh >> /var/log/jobmcp/backup.log 2>&1

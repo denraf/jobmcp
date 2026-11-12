@@ -4,8 +4,8 @@ whole (descriptions included), and one query per row."""
 
 from sqlalchemy import event
 
-from livejobs import db, migrations
-from livejobs.services import search, sync
+from jobmcp import db, migrations
+from jobmcp.services import search, sync
 
 from .helpers import fj, mk_board
 

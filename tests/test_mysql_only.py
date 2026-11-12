@@ -1,4 +1,4 @@
-"""livejobs supports MySQL only. These pin that down, and exercise the MySQL
+"""jobmcp supports MySQL only. These pin that down, and exercise the MySQL
 behaviour the schema relies on."""
 
 from pathlib import Path
@@ -7,9 +7,9 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
-from livejobs import db
-from livejobs.orm import Board, Job
-from livejobs.services import boards, sync
+from jobmcp import db
+from jobmcp.orm import Board, Job
+from jobmcp.services import boards, sync
 
 from .helpers import fj, mk_board
 
@@ -44,8 +44,8 @@ def test_charset_is_always_utf8mb4():
 
 def test_no_trace_of_sqlite_remains_in_the_project():
     checked = [
-        *ROOT.glob("livejobs/**/*.py"),
-        *ROOT.glob("livejobs/web/**/*.js"),
+        *ROOT.glob("jobmcp/**/*.py"),
+        *ROOT.glob("jobmcp/web/**/*.js"),
         *ROOT.glob("scripts/*"),
         *ROOT.glob("deploy/**/*"),
         *ROOT.glob("docs/*"),
@@ -66,7 +66,7 @@ def test_no_trace_of_sqlite_remains_in_the_project():
     assert not offenders, (
         f"SQLite is not supported; remove it from: {offenders}"
     )
-    assert "StaticPool" not in (ROOT / "livejobs" / "db.py").read_text()
+    assert "StaticPool" not in (ROOT / "jobmcp" / "db.py").read_text()
 
 
 @pytest.mark.usefixtures("fresh_db")
@@ -166,13 +166,13 @@ class TestMySqlBehaviour:
 
 
 def test_cli_reports_a_non_mysql_url_without_a_traceback(monkeypatch, capsys):
-    from livejobs import cli
+    from jobmcp import cli
 
     with pytest.raises(SystemExit) as e:
         cli.main(["--db-url", "sqlite:///x.db", "init-db"])
-    assert str(e.value).startswith("error: livejobs needs MySQL")
-    monkeypatch.setenv("LIVEJOBS_DATABASE_URL", "postgresql://u@h/d")
-    from livejobs import config
+    assert str(e.value).startswith("error: jobmcp needs MySQL")
+    monkeypatch.setenv("JOBMCP_DATABASE_URL", "postgresql://u@h/d")
+    from jobmcp import config
 
     monkeypatch.setattr(config, "DATABASE_URL", "postgresql://u@h/d")
     with pytest.raises(SystemExit) as e:

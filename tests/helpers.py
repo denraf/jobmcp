@@ -1,6 +1,6 @@
-from livejobs import db
-from livejobs.models import Job as Fetched
-from livejobs.services import auth, boards
+from jobmcp import db
+from jobmcp.models import Job as Fetched
+from jobmcp.services import auth, boards
 
 
 def mk_user(email="a@x.io", role="user"):

@@ -3,7 +3,7 @@ import time
 
 import requests
 
-from livejobs import http
+from jobmcp import http
 
 
 def test_gate_spaces_requests_across_threads():
@@ -78,7 +78,7 @@ def test_connection_refused_also_backs_off_together(monkeypatch):
 
 
 def test_common_crawl_has_its_own_threads_session_and_gate(monkeypatch):
-    from livejobs import db, inventory
+    from jobmcp import db, inventory
 
     assert http.crawl_session is not http._session
     assert http.crawl_session.get_adapter(
@@ -90,7 +90,7 @@ def test_common_crawl_has_its_own_threads_session_and_gate(monkeypatch):
         seen.add(threading.current_thread().name)
         return ["https://boards.greenhouse.io/acme"]
 
-    from livejobs.orm import Base
+    from jobmcp.orm import Base
 
     db.create_schema()
     try:
@@ -137,7 +137,7 @@ def test_request_refuses_at_once_while_the_gate_is_open(monkeypatch):
 
 
 def test_a_crawl_stops_when_common_crawl_is_unreachable(monkeypatch):
-    from livejobs import inventory
+    from jobmcp import inventory
 
     monkeypatch.setattr(inventory._gate, "trip_after", 3)
     queried, messages = [], []

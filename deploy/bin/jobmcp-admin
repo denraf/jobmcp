@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Run any `jobmcp` command with the production environment loaded:
+#   sudo -u jobmcp /opt/jobmcp/deploy/bin/jobmcp-admin boards stats
+set -euo pipefail
+ENV_FILE="${JOBMCP_ENV_FILE:-/etc/jobmcp/jobmcp.env}"
+APP_DIR="${JOBMCP_APP_DIR:-/opt/jobmcp}"
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
+exec "$APP_DIR/.venv/bin/jobmcp" "$@"

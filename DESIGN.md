@@ -1,11 +1,11 @@
-# livejobs — Style Reference
+# jobmcp — Style Reference
 > Apple keynote on surgical white — clinical, weightless, electric blue as single accent in monochrome void
 
 **Theme:** light
 
 Source measurements are normalized; roles and recommendations are interpreted. Font summary lists are independent, not paired by position. HTML examples are reconstructions, not source components.
 
-livejobs discovers company career boards across the major ATSs, syncs the ones you choose on a schedule, and lets each user's own AI agent (via MCP) work through the jobs that match their preferences, with a per-user ledger of what was applied to. It never applies on anyone's behalf and holds no résumé or personal details. Its interface operates in a clinical-white void anchored by deep charcoal typography and one precise electric blue. The entire system reads as a calm, trustworthy, high-end tool: sparse, weight-350 type, pill-shaped interface elements floating in near-infinite negative space, and zero decorative chrome. Color is rationed — blue appears only as functional borders on links and tags, never as fills, giving the interface a cool, instrument-panel quality. The layout breathes vertically with 90+px section gaps and max-width centering, creating an editorial rhythm that treats every section like a spread.
+jobmcp discovers company career boards across the major ATSs, syncs the ones you choose on a schedule, and lets each user's own AI agent (via MCP) work through the jobs that match their preferences, with a per-user ledger of what was applied to. It never applies on anyone's behalf and holds no résumé or personal details. Its interface operates in a clinical-white void anchored by deep charcoal typography and one precise electric blue. The entire system reads as a calm, trustworthy, high-end tool: sparse, weight-350 type, pill-shaped interface elements floating in near-infinite negative space, and zero decorative chrome. Color is rationed — blue appears only as functional borders on links and tags, never as fills, giving the interface a cool, instrument-panel quality. The layout breathes vertically with 90+px section gaps and max-width centering, creating an editorial rhythm that treats every section like a spread.
 
 ## Colors
 
@@ -91,7 +91,7 @@ Border-radius 26px, background rgba(12,13,15,0.05) — near-transparent charcoal
 ### Dark Band Footer
 **Role:** Page footer
 
-Full-width #0f1012 background, padding 50px top and 69px horizontal, text centered in white at 10-16px weight 350. Contains the 'livejobs' wordmark, a privacy line ('We never apply for you and never store your résumé'), and footer nav. The dark band creates a clear bookend after the light content sections.
+Full-width #0f1012 background, padding 50px top and 69px horizontal, text centered in white at 10-16px weight 350. Contains the 'jobmcp' wordmark, a privacy line ('We never apply for you and never store your résumé'), and footer nav. The dark band creates a clear bookend after the light content sections.
 
 ### Section Label Pair
 **Role:** Two-line section heading
@@ -140,16 +140,16 @@ The system deliberately avoids drop shadows. Elevation is communicated through p
 
 ## Imagery
 
-There is no photography or illustration. The hero is type-led: a large headline stating what livejobs does (find career boards, sync the ones you choose, let your own agent work through the matches), set against the clinical white canvas. Iconography is minimal: a single logo glyph in the nav and footer. Imagery density is extremely low — text dominates at roughly 95% of all content.
+There is no photography or illustration. The hero is type-led: a large headline stating what jobmcp does (find career boards, sync the ones you choose, let your own agent work through the matches), set against the clinical white canvas. Iconography is minimal: a single logo glyph in the nav and footer. Imagery density is extremely low — text dominates at roughly 95% of all content.
 
 ## Layout
 
-Full-bleed sections with max-width 1200px content centering. Navigation is a floating pill (rounded 10px container) with 5 inline links, positioned top-center. Hero is full-viewport with the headline and a short explainer of what livejobs does, text block bottom-left. Below the hero, sections alternate between white canvas and slightly recessed #f2f2f4 panels separated by generous 90-100px vertical breathing room. The 'How it works' section uses a 3-column asymmetric grid (narrow labels | wide heading | side paragraph). Footer is a full-bleed dark band (#0f1012) with centered white text. Throughout, content stays left-aligned within its container, never center-justified in multi-line blocks.
+Full-bleed sections with max-width 1200px content centering. Navigation is a floating pill (rounded 10px container) with 5 inline links, positioned top-center. Hero is full-viewport with the headline and a short explainer of what jobmcp does, text block bottom-left. Below the hero, sections alternate between white canvas and slightly recessed #f2f2f4 panels separated by generous 90-100px vertical breathing room. The 'How it works' section uses a 3-column asymmetric grid (narrow labels | wide heading | side paragraph). Footer is a full-bleed dark band (#0f1012) with centered white text. Throughout, content stays left-aligned within its container, never center-justified in multi-line blocks.
 
 ## Similar Brands
 
 - **Apple (apple.com)** — Same weightless white canvas, weight-300/350 typography whisper-weight headlines, floating pill nav centered over full-viewport hero with type as the sole visual anchor
-- **Nothing (nothing.tech)** — Same clinical white product pages with one chromatic accent (red for Nothing, blue for livejobs), dot-matrix aesthetic, pill-shaped tags, and restrained product presentation on pure white
+- **Nothing (nothing.tech)** — Same clinical white product pages with one chromatic accent (red for Nothing, blue for jobmcp), dot-matrix aesthetic, pill-shaped tags, and restrained product presentation on pure white
 - **Linear** — Same near-black #0f1012/#020201 text on light backgrounds, tight letter-spacing, minimal flat UI with hairline borders, and a single accent color rationed across interactive elements only
 - **Vercel** — Same max-width centered content, generous vertical section gaps, monochrome palette with one signal accent color used exclusively for interactive states
 - **Humane (humane.ai)** — Same humanistic tech positioning with a type-led hero, clinical-white void aesthetic, and pill-shaped interactive elements floating in negative space

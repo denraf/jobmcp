@@ -10,7 +10,7 @@ import pytest
 
 COMMON = (
     Path(__file__).resolve().parent.parent
-    / "livejobs"
+    / "jobmcp"
     / "web"
     / "js"
     / "common.js"
@@ -131,11 +131,11 @@ def run_theme(script: str):
 
 
 def theme_script(body: str, saved: str | None = None) -> str:
-    pre = f"store.set('livejobs-theme', {json.dumps(saved)});" if saved else ""
+    pre = f"store.set('jobmcp-theme', {json.dumps(saved)});" if saved else ""
     return f"""
       {pre}
       await import({json.dumps(THEME.as_uri())});
-      const t = globalThis.livejobsTheme, root = document.documentElement;
+      const t = globalThis.jobmcpTheme, root = document.documentElement;
       {body}
     """
 
@@ -149,11 +149,11 @@ def test_light_is_the_default_whatever_the_system_prefers():
       out.system_dark = [root.dataset.theme ?? null, t.current()];
       t.set('dark');
       out.dark = [
-        root.dataset.theme, t.current(), store.get('livejobs-theme'),
+        root.dataset.theme, t.current(), store.get('jobmcp-theme'),
       ];
       t.set('light');
       out.light = [
-        root.dataset.theme ?? null, t.current(), store.get('livejobs-theme'),
+        root.dataset.theme ?? null, t.current(), store.get('jobmcp-theme'),
       ];
       out.events = globalThis.fired;
       console.log(JSON.stringify(out));
@@ -198,7 +198,7 @@ def test_blocked_storage_does_not_break_the_switch():
       globalThis.dispatchEvent = () => {{}};
       globalThis.CustomEvent = class {{}};
       await import({json.dumps(THEME.as_uri())});
-      const t = globalThis.livejobsTheme;
+      const t = globalThis.jobmcpTheme;
       t.set('dark');
       const a = document.documentElement.dataset.theme;
       console.log(JSON.stringify([a, t.current()]));

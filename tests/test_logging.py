@@ -5,7 +5,7 @@ import logging
 import pytest
 from fastapi.testclient import TestClient
 
-from livejobs import logs
+from jobmcp import logs
 
 from .helpers import mk_user
 
@@ -29,37 +29,37 @@ def captured(monkeypatch):
     for h in saved_h:
         root.addHandler(h)
     root.setLevel(saved_l)
-    for n in ("livejobs.sync", "livejobs.http", "uvicorn.access"):
+    for n in ("jobmcp.sync", "jobmcp.http", "uvicorn.access"):
         logging.getLogger(n).setLevel(logging.NOTSET)
 
 
 def test_level_comes_from_the_environment(captured, monkeypatch):
-    monkeypatch.setattr("livejobs.config.LOG_LEVEL", "warning")
+    monkeypatch.setattr("jobmcp.config.LOG_LEVEL", "warning")
     logs.setup()
-    logging.getLogger("livejobs.x").info("hidden")
-    logging.getLogger("livejobs.x").warning("shown")
+    logging.getLogger("jobmcp.x").info("hidden")
+    logging.getLogger("jobmcp.x").warning("shown")
     assert (
         "shown" in captured.getvalue() and "hidden" not in captured.getvalue()
     )
 
 
 def test_debug_and_per_logger_overrides(captured):
-    logs.setup("INFO", "text", "livejobs.sync=DEBUG")
-    logging.getLogger("livejobs.sync").debug("sync detail")
-    logging.getLogger("livejobs.other").debug("other detail")
+    logs.setup("INFO", "text", "jobmcp.sync=DEBUG")
+    logging.getLogger("jobmcp.sync").debug("sync detail")
+    logging.getLogger("jobmcp.other").debug("other detail")
     out = captured.getvalue()
     assert "sync detail" in out and "other detail" not in out
 
 
 def test_json_format_is_one_object_per_line_with_extras(captured):
     logs.setup("INFO", "json")
-    logging.getLogger("livejobs.api").info("login", extra={"user_id": 7})
+    logging.getLogger("jobmcp.api").info("login", extra={"user_id": 7})
     rec = json.loads(captured.getvalue().strip().splitlines()[-1])
     assert (
         rec["msg"] == "login"
         and rec["user_id"] == 7
         and rec["level"] == "INFO"
-        and rec["logger"] == "livejobs.api"
+        and rec["logger"] == "jobmcp.api"
     )
 
 
@@ -78,7 +78,7 @@ def test_noisy_libraries_are_quiet_even_at_debug(captured):
 
 @pytest.mark.usefixtures("fresh_db")
 def test_requests_are_logged_without_query_strings_or_credentials(captured):
-    from livejobs.site import app
+    from jobmcp.site import app
 
     logs.setup("INFO", "text")
     mk_user("a@x.io", "user")
@@ -102,7 +102,7 @@ def test_requests_are_logged_without_query_strings_or_credentials(captured):
 
 @pytest.mark.usefixtures("fresh_db")
 def test_sync_logs_per_board_at_debug_and_a_summary_at_info(captured):
-    from livejobs.services import sync
+    from jobmcp.services import sync
     from .helpers import fj, mk_board
 
     ids = [mk_board("lever", "a"), mk_board("lever", "b")]
@@ -110,7 +110,7 @@ def test_sync_logs_per_board_at_debug_and_a_summary_at_info(captured):
     sync.sync_many(ids, 2, lambda v, b: [fj("T", board=b, vendor=v)])
     out = captured.getvalue()
     assert "synced 2 boards" in out and "sync ok lever/a" not in out
-    logs.setup("INFO", "text", "livejobs.sync=DEBUG")
+    logs.setup("INFO", "text", "jobmcp.sync=DEBUG")
     sync.sync_many(ids, 2, lambda v, b: [fj("T", board=b, vendor=v)])
     assert "sync ok lever/a" in captured.getvalue()
 
@@ -118,7 +118,7 @@ def test_sync_logs_per_board_at_debug_and_a_summary_at_info(captured):
 @pytest.mark.usefixtures("fresh_db")
 def test_failed_and_disabled_boards_are_logged(captured):
     import requests
-    from livejobs.services import sync
+    from jobmcp.services import sync
     from .helpers import mk_board
 
     bid = mk_board("lever", "gone")
@@ -135,9 +135,9 @@ def test_failed_and_disabled_boards_are_logged(captured):
 
 @pytest.mark.usefixtures("fresh_db")
 def test_a_refused_token_says_why(captured):
-    from livejobs import db
-    from livejobs.services import auth
-    from livejobs.orm import User
+    from jobmcp import db
+    from jobmcp.services import auth
+    from jobmcp.orm import User
     from .helpers import mk_user
 
     uid = mk_user("a@x.io")
@@ -160,7 +160,7 @@ def test_a_refused_token_says_why(captured):
 
 
 def test_http_pool_is_big_enough_for_the_sync_threads():
-    from livejobs import config, http
+    from jobmcp import config, http
 
     ad = http._session.get_adapter("https://apply.workable.com/")
     assert (

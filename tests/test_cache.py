@@ -4,11 +4,11 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from livejobs import cache, config, services
-from livejobs.site import app
+from jobmcp import cache, config, services
+from jobmcp.site import app
 
 from .helpers import fj, mk_board
-from livejobs.services import sync
+from jobmcp.services import sync
 
 
 def test_a_value_is_reused_until_it_expires():

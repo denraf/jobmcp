@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the jobmcp sync every hour
+
+[Timer]
+# Top of every hour. Persistent: if the machine was off at the time, run once when it comes back.
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

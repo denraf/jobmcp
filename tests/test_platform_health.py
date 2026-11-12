@@ -7,10 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from livejobs import canary, db, health, migrations, site
-from livejobs.api import app
-from livejobs.orm import Board, CanaryResult, Job, VendorSnapshot, utcnow
-from livejobs.services import boards, matching, prefs, search, sync
+from jobmcp import canary, db, health, migrations, site
+from jobmcp.api import app
+from jobmcp.orm import Board, CanaryResult, Job, VendorSnapshot, utcnow
+from jobmcp.services import boards, matching, prefs, search, sync
 
 from .helpers import fj, mk_board, mk_user
 
@@ -104,7 +104,7 @@ def test_snapshot_records_today_once_and_updates_it():
 
 
 def test_anomaly_shows_in_metrics_and_the_admin_endpoint(c, admin):
-    from livejobs import metrics
+    from jobmcp import metrics
 
     now = utcnow()
     for i in range(7, 0, -1):
@@ -112,11 +112,9 @@ def test_anomaly_shows_in_metrics_and_the_admin_endpoint(c, admin):
     _snap("lever", 20, 0, now)
     metrics.collector.reset()
     text = TestClient(site.app, client=("127.0.0.1", 1)).get("/metrics").text
+    assert 'jobmcp_vendor_anomaly{direction="drop",vendor="lever"} 1.0' in text
     assert (
-        'livejobs_vendor_anomaly{direction="drop",vendor="lever"} 1.0' in text
-    )
-    assert (
-        'livejobs_vendor_anomaly{direction="spike",vendor="lever"} 0.0' in text
+        'jobmcp_vendor_anomaly{direction="spike",vendor="lever"} 0.0' in text
     )
     rows = c.get("/admin/health", headers=admin).json()
     assert rows[0]["vendor"] == "lever" and rows[0]["state"] == "drop"
@@ -176,7 +174,7 @@ def test_canary_prefers_small_enabled_boards_from_the_database_then_samples():
 
 def test_canary_env_boards_and_nothing_to_check(monkeypatch):
     monkeypatch.setattr(
-        "livejobs.config.CANARY_BOARDS", "breezy:mine, lever:other"
+        "jobmcp.config.CANARY_BOARDS", "breezy:mine, lever:other"
     )
     assert canary.candidates("breezy")[0] == "mine"
     assert canary.check("bamboohr", lambda v, b: []) is None  # no sample known
@@ -304,7 +302,7 @@ def test_preferences_use_the_new_filters():
     _stored()
     uid = mk_user("p@x.io")
     with db.session() as s:
-        from livejobs.orm import User
+        from jobmcp.orm import User
 
         u = s.get(User, uid)
         p = prefs.update_preferences(

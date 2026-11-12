@@ -4,10 +4,10 @@
     path: "{{ apache_cert_file }}"
   register: cert
 
-- name: Write the livejobs site
+- name: Write the jobmcp site
   ansible.builtin.template:
-    src: livejobs.conf.j2
-    dest: /etc/apache2/sites-available/livejobs.conf
+    src: jobmcp.conf.j2
+    dest: /etc/apache2/sites-available/jobmcp.conf
     owner: root
     group: root
     mode: "0644"
@@ -18,9 +18,9 @@
 - name: Enable it, and make sure Apache accepts the whole configuration
   block:
     - name: Enable the site
-      ansible.builtin.command: a2ensite livejobs.conf
+      ansible.builtin.command: a2ensite jobmcp.conf
       args:
-        creates: /etc/apache2/sites-enabled/livejobs.conf
+        creates: /etc/apache2/sites-enabled/jobmcp.conf
 
     - name: Check the configuration
       ansible.builtin.command: apache2ctl configtest
@@ -28,11 +28,11 @@
   rescue:
     # Never leave Apache's shared configuration broken: it serves other sites too.
     - name: Take the site out again
-      ansible.builtin.command: a2dissite livejobs.conf
+      ansible.builtin.command: a2dissite jobmcp.conf
       changed_when: true
 
     - name: Stop here
       ansible.builtin.fail:
         msg: >-
-          Apache rejected the livejobs site, so it was disabled again and nothing was reloaded. Run
+          Apache rejected the jobmcp site, so it was disabled again and nothing was reloaded. Run
           `apache2ctl configtest` on the web server for the reason.

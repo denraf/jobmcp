@@ -1,6 +1,6 @@
 ---
 # Apache is already installed and serving other sites. Nothing here touches those: this adds modules, one vhost file
-# for livejobs_domain, and (optionally) one certificate.
+# for jobmcp_domain, and (optionally) one certificate.
 - name: Packages
   ansible.builtin.apt:
     name: "{{ ['apache2'] + (['certbot', 'python3-certbot-apache'] if apache_certbot | bool else []) }}"
@@ -28,7 +28,7 @@
     - name: Obtain the certificate (renews itself through certbot's systemd timer)
       ansible.builtin.command: >-
         certbot certonly --apache --non-interactive --agree-tos
-        -m {{ certbot_email | quote }} -d {{ livejobs_domain | quote }}
+        -m {{ certbot_email | quote }} -d {{ jobmcp_domain | quote }}
         --deploy-hook "systemctl reload apache2"
       args:
         creates: "{{ apache_cert_file }}"
@@ -42,7 +42,7 @@
 - name: HTTPS answers through Apache, and /metrics is not public
   when: cert.stat.exists
   ansible.builtin.uri:
-    url: "https://{{ livejobs_domain }}{{ item.path }}"
+    url: "https://{{ jobmcp_domain }}{{ item.path }}"
     status_code: "{{ item.status }}"
   loop:
     - { path: /healthz, status: 200 }

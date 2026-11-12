@@ -1,0 +1,21 @@
+[Unit]
+Description=jobmcp sync worker (alternative to the hourly timer/cron: a daemon that syncs boards as they come due)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jobmcp
+Group=jobmcp
+WorkingDirectory=/opt/jobmcp
+EnvironmentFile=/etc/jobmcp/jobmcp.env
+ExecStart=/opt/jobmcp/.venv/bin/jobmcp worker --workers 8
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

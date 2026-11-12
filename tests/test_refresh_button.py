@@ -9,10 +9,10 @@ import requests
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from livejobs import db, inventory, metrics
-from livejobs.api import app
-from livejobs.orm import InventoryRun, utcnow
-from livejobs.services import boards
+from jobmcp import db, inventory, metrics
+from jobmcp.api import app
+from jobmcp.orm import InventoryRun, utcnow
+from jobmcp.services import boards
 
 from .helpers import mk_user
 
@@ -203,17 +203,15 @@ def test_progress_is_visible_while_it_runs(c, admin, crawl):
         # interrupted)
     )
     metrics.collector.reset()
-    from livejobs.site import app as site_app
+    from jobmcp.site import app as site_app
 
     scrape = TestClient(site_app, client=("127.0.0.1", 1)).get("/metrics").text
-    assert (
-        "livejobs_inventory_running 1.0" in scrape
-    )  # operators can see it too
+    assert "jobmcp_inventory_running 1.0" in scrape  # operators can see it too
     gate.set()
     wait_for(c, admin, lambda i: i["running"] is None)
     metrics.collector.reset()
     assert (
-        "livejobs_inventory_running 0.0"
+        "jobmcp_inventory_running 0.0"
         in TestClient(site_app, client=("127.0.0.1", 1)).get("/metrics").text
     )
 
@@ -423,7 +421,7 @@ def test_a_live_run_is_never_mistaken_for_a_dead_one(c, admin, crawl):
 
 
 def test_metrics_do_not_report_a_dead_run_as_running(crawl):
-    from livejobs.site import app as site_app
+    from jobmcp.site import app as site_app
 
     with db.session() as s:
         s.add(
@@ -436,7 +434,7 @@ def test_metrics_do_not_report_a_dead_run_as_running(crawl):
         )
     metrics.collector.reset()
     assert (
-        "livejobs_inventory_running 0.0"
+        "jobmcp_inventory_running 0.0"
         in TestClient(site_app, client=("127.0.0.1", 1)).get("/metrics").text
     )
 
@@ -444,7 +442,7 @@ def test_metrics_do_not_report_a_dead_run_as_running(crawl):
 def test_schema_upgrade_adds_the_progress_columns():
     from sqlalchemy import text
 
-    from livejobs import migrations
+    from jobmcp import migrations
 
     with db.engine().begin() as conn:
         conn.execute(
@@ -460,7 +458,7 @@ def test_the_lock_is_per_database_so_installs_do_not_block_each_other():
     from sqlalchemy import text
 
     name = inventory.lock_name()
-    assert len(name) <= 64 and name.startswith("livejobs:inventory:")
+    assert len(name) <= 64 and name.startswith("jobmcp:inventory:")
     # another install's lock (a different database name hashes differently)
     # held on the same server
     other = db.engine().connect()
@@ -468,7 +466,7 @@ def test_the_lock_is_per_database_so_installs_do_not_block_each_other():
         assert (
             other.execute(
                 text("SELECT GET_LOCK(:n, 0)"),
-                {"n": "livejobs:inventory:" + "0" * 24},
+                {"n": "jobmcp:inventory:" + "0" * 24},
             ).scalar()
             == 1
         )
@@ -483,6 +481,6 @@ def test_the_lock_is_per_database_so_installs_do_not_block_each_other():
     finally:
         other.execute(
             text("SELECT RELEASE_LOCK(:n)"),
-            {"n": "livejobs:inventory:" + "0" * 24},
+            {"n": "jobmcp:inventory:" + "0" * 24},
         )
         other.close()

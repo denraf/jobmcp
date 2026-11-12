@@ -1,0 +1,28 @@
+# Managed by Ansible.
+[Unit]
+Description=jobmcp scheduler (hourly job fetch, monthly Common Crawl refresh, daily platform check)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ jobmcp_user }}
+Group={{ jobmcp_user }}
+WorkingDirectory={{ jobmcp_app_dir }}
+EnvironmentFile=/etc/jobmcp/jobmcp.env
+ExecStart={{ jobmcp_app_dir }}/.venv/bin/jobmcp scheduler
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=120
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

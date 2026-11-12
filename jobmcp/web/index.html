@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jobmcp: your agent applies, your résumé stays yours</title>
+<meta name="description" content="jobmcp finds open jobs on company career pages and hands them to your own AI agent. It never applies for you and never asks for your résumé or contact details.">
+<meta name="color-scheme" content="light">
+<link rel="preload" href="/static/fonts/Inter.woff2" as="font" type="font/woff2" crossorigin>
+<script src="/static/js/theme.js"></script>
+<link rel="stylesheet" href="/static/css/site.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23f4dc5a'/%3E%3Cpath d='M9 8v16h4V8z M17 14h6v10h-6z' fill='%230f2530'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="site-head" id="site-head"></header>
+<main id="main">
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <h1>Your agent applies. Your résumé stays yours.</h1>
+      <p class="lede">jobmcp finds open roles straight from company career pages and tells your AI agent which ones fit. It does not apply for you, and it never asks for your résumé, phone number or address. You keep those. Your agent uses them.</p>
+      <div class="cta-row">
+        <a class="btn btn-stamp" id="cta-register" href="/register">Create a free account</a>
+        <a class="btn btn-quiet" href="/jobs">Browse jobs</a>
+      </div>
+      <p class="hero-note">Works with Claude, Codex, Gemini CLI and any assistant that can connect to an MCP server.</p>
+    </div>
+
+    <figure class="ledger play flush" id="ledger" aria-label="Example: what happens on your side and what jobmcp records when your agent applies to one job">
+      <div class="ledger-head"><div>Stays with you</div><div>jobmcp records</div></div>
+      <div class="ledger-row"><div></div><div class="ledger-rec">Your agent asked for remote data engineer jobs. <b>3 new matches.</b></div></div>
+      <div class="ledger-row"><div></div><div class="ledger-rec">Senior Data Engineer at Acme: <b>claimed</b></div></div>
+      <div class="ledger-row"><div class="ledger-mine">Your agent opens Acme’s own application form and fills in your résumé, phone number and address from your files.</div><div></div></div>
+      <div class="ledger-row"><div class="ledger-mine">Acme sends the confirmation email to you.</div><div class="ledger-rec">Senior Data Engineer at Acme: <b>applied</b><br><span class="stamp">applied</span></div></div>
+      <figcaption class="ledger-foot">An example of one application. Nothing in the left column ever reaches jobmcp.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="does">
+  <div class="wrap">
+    <h2 id="does">What jobmcp does, and what it doesn’t</h2>
+    <p class="lede mb6"><span class="mark">jobmcp does not apply for you.</span> Your agent does, from your side, on the company’s own form.</p>
+    <div class="split">
+      <div>
+        <h3>jobmcp does</h3>
+        <ul class="plain-list">
+          <li>Collects open roles from employers’ own career pages, so you see them when the company posts them.</li>
+          <li>Matches them to the titles, places and keywords you choose.</li>
+          <li>Gives your agent the matches and the company’s apply link.</li>
+          <li>Keeps a plain record of what your agent applied to, so nothing is applied for twice.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>jobmcp doesn’t</h3>
+        <ul class="plain-list">
+          <li>Apply to anything. There is no “apply for me” button, on purpose.</li>
+          <li>Ask for or store your résumé, phone number, address, name or answers to application questions.</li>
+          <li>Read your email, or sign in to other sites as you.</li>
+          <li>Hold anything worth selling: we keep your email, your search preferences, your saved jobs and a status per job.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="how">
+  <div class="wrap">
+    <h2 id="how">How it works</h2>
+    <ol class="steps">
+      <li><div><h3>Create an account</h3><p>An email and a password. Then say what you’re looking for: job titles, places, remote or not, and the most applications you want in a day.</p></div></li>
+      <li><div><h3>Connect your agent</h3><p>Create a personal token in your portal and paste one command into Claude, Codex or Gemini. The token opens your list and nobody else’s. Revoke it whenever you like.</p></div></li>
+      <li><div><h3>Ask your agent to apply</h3><p>It reads your matches, claims a job, opens the company’s form and fills it in with the résumé and details you keep on your side. It asks you about anything it doesn’t know, such as visa sponsorship, disability, gender or a company’s own questions, and never guesses. If it can’t finish a form, it skips the job and says why.</p></div></li>
+      <li><div><h3>Check the record</h3><p>Every job your agent touches appears in your portal as applied, skipped or failed.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="section" id="numbers-section" hidden>
+  <div class="wrap"><p class="numbers" id="numbers"></p></div>
+</section>
+
+<section class="section" aria-labelledby="faq">
+  <div class="wrap">
+    <h2 id="faq">Questions</h2>
+    <div class="faq">
+      <details><summary>Where does my résumé go?</summary><p>Not to jobmcp. Keep it as a file your agent can read, or in your agent’s own project or memory. When your agent submits a company’s form, the résumé goes to that company, exactly as if you had applied yourself.</p></details>
+      <details><summary>What does jobmcp know about me?</summary><p>Your email address, a hash of your password, your search preferences, the jobs you saved, and a status for each job your agent worked on. The <a href="/privacy">privacy page</a> lists everything.</p></details>
+      <details><summary>Can my agent apply to any job?</summary><p>Only where it can complete the form. Some companies require an account or show a captcha. Your agent records those as skipped or failed, and you can open them yourself from your portal.</p></details>
+      <details><summary>What stops an agent from applying to hundreds of jobs?</summary><p>You set a daily limit in your preferences, 20 by default. Once you reach it, jobmcp won’t let your agent start another application that day, and it never lets it apply to the same job twice.</p></details>
+      <details><summary>Where do the jobs come from?</summary><p>From employers’ own career pages, on hiring platforms such as Greenhouse, Lever, Ashby, Workable and Workday. These are the companies’ own listings, not copies from a job board.</p></details>
+      <details><summary>How do I delete my data?</summary><p>In your portal, open Account and choose Delete account. Your preferences, saved jobs, application record and tokens are erased immediately.</p></details>
+    </div>
+  </div>
+</section>
+
+<div class="band">
+  <div class="wrap">
+    <h2>Find the jobs. Keep your details.</h2>
+    <a class="btn btn-stamp" href="/register">Create a free account</a>
+  </div>
+</div>
+
+</main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="module" src="/static/js/home.js"></script>
+</body>
+</html>

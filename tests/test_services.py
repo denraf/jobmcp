@@ -3,9 +3,9 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select
 
-from livejobs import db
-from livejobs.orm import Application, Board, Job, utcnow
-from livejobs.services import (
+from jobmcp import db
+from jobmcp.orm import Application, Board, Job, utcnow
+from jobmcp.services import (
     ServiceError,
     applications,
     auth,
@@ -96,7 +96,7 @@ def test_a_disabled_board_stays_off_when_crawl_sees_it_again():
 
 
 def test_enable_discovered_promotes_old_rows_only():
-    from livejobs.orm import Board
+    from jobmcp.orm import Board
 
     with db.session() as s:
         s.add(Board(vendor="lever", board="old", status="discovered"))
@@ -161,7 +161,7 @@ def test_per_board_interval_and_failure_backoff():
 
 
 def test_gone_board_is_disabled_and_jobs_closed():
-    from livejobs.vendors.base import BoardGone
+    from jobmcp.vendors.base import BoardGone
 
     bid = mk_board()
     sync.sync_board(bid, lambda v, s: [fj("X")])
@@ -393,7 +393,7 @@ def test_preferences_validation():
 def test_no_personal_data_is_stored():
     """The privacy promise, as a schema check: no table has a
     name/phone/resume/address-like column."""
-    from livejobs.orm import Base
+    from jobmcp.orm import Base
 
     cols = {c.name for t in Base.metadata.tables.values() for c in t.columns}
     assert not cols & {
@@ -460,7 +460,7 @@ def test_change_password_and_delete_account():
             auth.delete_account(s, u, "wrong")
         auth.delete_account(s, u, "new-password-123")
     with db.session() as s:
-        from livejobs.orm import ApiToken, Preferences, SavedJob, User
+        from jobmcp.orm import ApiToken, Preferences, SavedJob, User
 
         assert s.get(User, uid) is None
         for m in (Application, ApiToken, SavedJob, Preferences):

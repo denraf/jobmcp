@@ -8,8 +8,8 @@
 
 - name: Listen on the private address, and settings the app needs
   ansible.builtin.template:
-    src: livejobs.cnf.j2
-    dest: /etc/mysql/mysql.conf.d/zz-livejobs.cnf
+    src: jobmcp.cnf.j2
+    dest: /etc/mysql/mysql.conf.d/zz-jobmcp.cnf
     owner: root
     group: root
     mode: "0644"
@@ -62,25 +62,25 @@
 # ── nightly backup ──────────────────────────────────────────────────────
 - name: Backup user
   ansible.builtin.user:
-    name: livejobs-backup
+    name: jobmcp-backup
     system: true
     shell: /usr/sbin/nologin
-    home: /var/backups/livejobs
+    home: /var/backups/jobmcp
     create_home: false
 
 - name: Backup folder
   ansible.builtin.file:
-    path: /var/backups/livejobs
+    path: /var/backups/jobmcp
     state: directory
-    owner: livejobs-backup
-    group: livejobs-backup
+    owner: jobmcp-backup
+    group: jobmcp-backup
     mode: "0750"
 
 - name: Backup credentials (readable by the backup user only)
   ansible.builtin.copy:
-    dest: /etc/livejobs-backup.my.cnf
-    owner: livejobs-backup
-    group: livejobs-backup
+    dest: /etc/jobmcp-backup.my.cnf
+    owner: jobmcp-backup
+    group: jobmcp-backup
     mode: "0600"
     content: |
       [client]
@@ -90,15 +90,15 @@
 
 - name: Backup script (the one in this repository)
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../deploy/bin/livejobs-backup.sh"
-    dest: /usr/local/bin/livejobs-backup.sh
+    src: "{{ playbook_dir }}/../deploy/bin/jobmcp-backup.sh"
+    dest: /usr/local/bin/jobmcp-backup.sh
     owner: root
     group: root
     mode: "0755"
 
 - name: Nightly at 03:15, keeping the last {{ db_backup_keep }}
   ansible.builtin.copy:
-    dest: /etc/cron.d/livejobs-backup
+    dest: /etc/cron.d/jobmcp-backup
     owner: root
     group: root
     mode: "0644"
@@ -106,7 +106,7 @@
       # Managed by Ansible.
       SHELL=/bin/bash
       PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      LIVEJOBS_DB_NAME={{ db_name }}
-      LIVEJOBS_BACKUP_KEEP={{ db_backup_keep }}
-      LIVEJOBS_MYSQL_DEFAULTS=/etc/livejobs-backup.my.cnf
-      15 3 * * * livejobs-backup /usr/local/bin/livejobs-backup.sh >> /var/backups/livejobs/backup.log 2>&1
+      JOBMCP_DB_NAME={{ db_name }}
+      JOBMCP_BACKUP_KEEP={{ db_backup_keep }}
+      JOBMCP_MYSQL_DEFAULTS=/etc/jobmcp-backup.my.cnf
+      15 3 * * * jobmcp-backup /usr/local/bin/jobmcp-backup.sh >> /var/backups/jobmcp/backup.log 2>&1

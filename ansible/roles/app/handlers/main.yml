@@ -3,8 +3,8 @@
   ansible.builtin.systemd:
     daemon_reload: true
 
-- name: Restart livejobs
+- name: Restart jobmcp
   ansible.builtin.service:
     name: "{{ item }}"
     state: restarted
-  loop: [livejobs-web, livejobs-scheduler]
+  loop: [jobmcp-web, jobmcp-scheduler]

@@ -1,5 +1,5 @@
 ---
-# livejobs on two machines: the database server (group db) and the web server (group web: the app, the scheduler and
+# jobmcp on two machines: the database server (group db) and the web server (group web: the app, the scheduler and
 # Apache). Run:  ansible-playbook site.yml      (add --check --diff first if you like)
 - name: Check the settings before touching any machine
   hosts: all
@@ -20,8 +20,7 @@
     - name: Settings were changed from the examples
       ansible.builtin.assert:
         that:
-          - livejobs_domain != 'jobs.example.com'
-          - livejobs_admin_email != 'admin@example.com'
+          - jobmcp_admin_email != 'admin@example.com'
           - smtp_user != 'CHANGE_ME'
         fail_msg: Edit group_vars/all/main.yml (domain, admin email, SMTP).
 

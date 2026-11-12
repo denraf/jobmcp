@@ -1,0 +1,21 @@
+[Unit]
+Description=jobmcp: fetch the latest job posts from every enabled board
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=jobmcp
+Group=jobmcp
+WorkingDirectory=/opt/jobmcp
+EnvironmentFile=/etc/jobmcp/jobmcp.env
+# --slack 10: also take boards due within 10 minutes, so an hourly run doesn't skip boards that become due just after it.
+# flock -n -E 0: if the previous run still holds the lock, skip quietly (exit 0) instead of failing the unit.
+RuntimeDirectory=jobmcp
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/flock -n -E 0 /run/jobmcp/sync.lock /opt/jobmcp/.venv/bin/jobmcp sync-once --slack 10
+TimeoutStartSec=50min
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

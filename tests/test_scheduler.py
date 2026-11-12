@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from livejobs import cli, db, scheduler
-from livejobs.orm import User
-from livejobs.scheduler import Scheduler, next_hourly, next_inventory
+from jobmcp import cli, db, scheduler
+from jobmcp.orm import User
+from jobmcp.scheduler import Scheduler, next_hourly, next_inventory
 
 
 D = datetime
@@ -195,7 +195,7 @@ def test_a_slow_inventory_does_not_delay_the_hourly_sync():
         lambda: (order.append("inv-start"), gate.wait(5)),
         clock.now,
     )
-    clock.sch, clock.slow = sch, ("livejobs-inventory",)
+    clock.sch, clock.slow = sch, ("jobmcp-inventory",)
     sch.run(clock.stop, initial_sync=False, wait=clock.wait)
     sch._threads["sync"].join(5)
     assert (
@@ -207,9 +207,9 @@ def test_a_slow_inventory_does_not_delay_the_hourly_sync():
 
 
 def test_default_jobs_call_the_real_services(monkeypatch):
-    from livejobs import inventory
-    from livejobs.services import sync
-    from livejobs.services import boards
+    from jobmcp import inventory
+    from jobmcp.services import sync
+    from jobmcp.services import boards
 
     seen = {}
     monkeypatch.setattr(
@@ -225,7 +225,7 @@ def test_default_jobs_call_the_real_services(monkeypatch):
             seen.setdefault("inv", (a, k)) and ("up_to_date", None)
         ),
     )
-    from livejobs import health
+    from jobmcp import health
 
     monkeypatch.setattr(
         health, "snapshot_vendors", lambda: seen.setdefault("snapshot", True)
@@ -259,7 +259,7 @@ class TestStartupCommands:
     def test_ensure_admin_generates_a_password_once_and_keeps_existing(
         self, monkeypatch, capsys
     ):
-        monkeypatch.delenv("LIVEJOBS_ADMIN_PASSWORD", raising=False)
+        monkeypatch.delenv("JOBMCP_ADMIN_PASSWORD", raising=False)
         self.run_cli(
             monkeypatch, "ensure-admin", "--email", "Boss@Example.com"
         )
@@ -271,7 +271,7 @@ class TestStartupCommands:
         pw = out.split("password (shown once, change it in your portal): ")[
             1
         ].split()[0]
-        from livejobs.services import auth
+        from jobmcp.services import auth
 
         with db.session() as s:
             u = s.scalar(select(User).where(User.email == "boss@example.com"))
@@ -289,12 +289,12 @@ class TestStartupCommands:
     def test_ensure_admin_uses_a_given_password_and_skips_without_an_email(
         self, monkeypatch, capsys
     ):
-        monkeypatch.setenv("LIVEJOBS_ADMIN_PASSWORD", "chosen-password-123")
+        monkeypatch.setenv("JOBMCP_ADMIN_PASSWORD", "chosen-password-123")
         self.run_cli(monkeypatch, "ensure-admin", "--email", "a@x.io")
         assert (
             "generated" not in capsys.readouterr().out
         )  # a password you chose is never echoed back
-        monkeypatch.delenv("LIVEJOBS_ADMIN_EMAIL", raising=False)
+        monkeypatch.delenv("JOBMCP_ADMIN_EMAIL", raising=False)
         self.run_cli(monkeypatch, "ensure-admin")
         assert "not creating an admin" in capsys.readouterr().out
 
@@ -310,7 +310,7 @@ class TestStartupCommands:
         assert "gave up" in str(e.value) and "schema" in str(e.value)
 
     def test_schema_readiness(self):
-        from livejobs import migrations
+        from jobmcp import migrations
 
         assert migrations.is_current()
         with db.engine().begin() as c:
@@ -321,7 +321,7 @@ class TestStartupCommands:
 
 
 def test_canary_runs_daily_at_0530_alongside_the_other_jobs():
-    from livejobs.scheduler import next_daily
+    from jobmcp.scheduler import next_daily
 
     assert next_daily(D(2026, 11, 10, 5, 0), 5, 30) == D(2026, 11, 10, 5, 30)
     assert next_daily(D(2026, 11, 10, 5, 30), 5, 30) == D(2026, 11, 11, 5, 30)

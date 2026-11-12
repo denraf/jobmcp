@@ -13,9 +13,9 @@ import uvicorn
 from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 
-from livejobs import db, mcp_server
-from livejobs.orm import Application
-from livejobs.services import auth, prefs, sync
+from jobmcp import db, mcp_server
+from jobmcp.orm import Application
+from jobmcp.services import auth, prefs, sync
 from sqlalchemy import select
 
 from .helpers import fj, mk_board, mk_user
@@ -253,7 +253,7 @@ def test_search_over_mcp(server):
 
 
 def test_saved_jobs_over_mcp_are_per_user(server):
-    from livejobs import metrics
+    from jobmcp import metrics
 
     ok0 = metrics.MCP_CALLS.labels("save_job", "ok")._value.get()
     refused0 = metrics.MCP_CALLS.labels("save_job", "refused")._value.get()
@@ -288,8 +288,8 @@ def test_saved_jobs_over_mcp_are_per_user(server):
 
 def test_mcp_mounted_inside_the_site(fresh_db):
     """The same MCP endpoint, served at /mcp/ by the combined site app (what
-    `livejobs serve` runs)."""
-    from livejobs import site
+    `jobmcp serve` runs)."""
+    from jobmcp import site
 
     u1, _ = seed()
     token = token_for(u1)
@@ -361,7 +361,7 @@ def test_get_job_returns_the_whole_description_over_mcp(server):
     )  # and the same when the agent claims the job to apply
 
 
-# What the agent is told about the application form. livejobs cannot see the
+# What the agent is told about the application form. jobmcp cannot see the
 # form, so the instructions are the whole mechanism: pin the topics down.
 MUST_ASK = [
     "visa sponsorship",

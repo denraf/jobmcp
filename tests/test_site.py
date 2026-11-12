@@ -6,7 +6,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from livejobs.site import PAGES, WEB, app
+from jobmcp.site import PAGES, WEB, app
 
 from .helpers import fj, mk_board
 
@@ -101,7 +101,7 @@ def test_frontend_obeys_the_csp_and_avoids_unsafe_dom_apis():
 def test_privacy_copy_matches_the_schema():
     """The marketing promise (no résumé/contact data) must stay true of the
     database."""
-    from livejobs.orm import Base
+    from jobmcp.orm import Base
 
     cols = {c.name for t in Base.metadata.tables.values() for c in t.columns}
     assert not cols & {
@@ -125,7 +125,7 @@ def test_privacy_copy_matches_the_schema():
 
 
 def test_hostile_job_data_is_served_as_plain_data(c):
-    from livejobs.services import sync
+    from jobmcp.services import sync
 
     sync.sync_board(
         mk_board(),
@@ -150,7 +150,7 @@ def test_hostile_job_data_is_served_as_plain_data(c):
 def test_startup_warns_about_a_production_setup_that_cannot_send_mail(
     monkeypatch,
 ):
-    from livejobs import config, site
+    from jobmcp import config, site
 
     monkeypatch.setattr(config, "DEV_MODE", False)
     monkeypatch.setattr(config, "MAIL_BACKEND", "console")
@@ -160,7 +160,7 @@ def test_startup_warns_about_a_production_setup_that_cannot_send_mail(
         "localhost" in w for w in warnings
     )
     monkeypatch.setattr(config, "MAIL_BACKEND", "smtp")
-    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "https://jobs.example.com")
+    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "https://jobmcp.ai")
     assert site.startup_warnings() == []
     monkeypatch.setattr(config, "REQUIRE_EMAIL_VERIFICATION", False)
     monkeypatch.setattr(config, "MAIL_BACKEND", "console")

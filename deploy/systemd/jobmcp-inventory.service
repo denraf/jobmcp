@@ -1,0 +1,23 @@
+[Unit]
+Description=jobmcp: refresh the board inventory from the newest Common Crawl index (new boards wait for an admin to enable them)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=jobmcp
+Group=jobmcp
+WorkingDirectory=/opt/jobmcp
+EnvironmentFile=/etc/jobmcp/jobmcp.env
+# --refresh: do nothing if the newest crawl is already fully ingested; otherwise ingest it (resuming any pages
+# an earlier attempt missed). Exit 75 means "incomplete, run again later", which the timer does the next day.
+# flock -n -E 0: a run from yesterday that is still going makes this one skip quietly.
+RuntimeDirectory=jobmcp
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/flock -n -E 0 /run/jobmcp/inventory.lock /opt/jobmcp/.venv/bin/jobmcp inventory --refresh
+TimeoutStartSec=12h
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

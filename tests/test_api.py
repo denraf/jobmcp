@@ -1,9 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from livejobs import db
-from livejobs.api import app
-from livejobs.services import auth, sync
+from jobmcp import db
+from jobmcp.api import app
+from jobmcp.services import auth, sync
 
 from .helpers import fj, mk_user
 
@@ -101,7 +101,7 @@ def test_admin_controls_slugs(c, monkeypatch):
     mk_user("admin@x.io", "admin")
     ah = login(c, "admin@x.io")
     with db.session() as s:
-        from livejobs.services import boards
+        from jobmcp.services import boards
 
         boards.upsert_discovered(s, "greenhouse", {"big": 50, "small": 1})
     listed = c.get("/admin/boards?status=enabled", headers=ah).json()
@@ -258,7 +258,7 @@ def test_search_endpoint(c):
 def test_register_requires_verification_and_does_not_leak_accounts(
     c, monkeypatch
 ):
-    from livejobs import config, mailer
+    from jobmcp import config, mailer
 
     r = c.post("/auth/register", json={"email": "New@X.io", "password": PW})
     assert (
@@ -321,7 +321,7 @@ def _link_token(mail):
 
 
 def test_verify_email_flow(c):
-    from livejobs import mailer
+    from jobmcp import mailer
 
     c.post("/auth/register", json={"email": "v@x.io", "password": PW})
     tok = _link_token(mailer.outbox[-1])
@@ -344,8 +344,8 @@ def test_verify_email_flow(c):
 
 
 def test_resend_verification_cooldown_and_silence(c):
-    from livejobs import mailer
-    from livejobs.orm import EmailToken
+    from jobmcp import mailer
+    from jobmcp.orm import EmailToken
 
     c.post("/auth/register", json={"email": "v@x.io", "password": PW})
     assert len(mailer.outbox) == 1
@@ -394,8 +394,8 @@ def test_resend_verification_cooldown_and_silence(c):
 
 
 def test_expired_verification_link(c):
-    from livejobs import mailer
-    from livejobs.orm import EmailToken
+    from jobmcp import mailer
+    from jobmcp.orm import EmailToken
 
     c.post("/auth/register", json={"email": "v@x.io", "password": PW})
     with db.session() as s:
@@ -410,8 +410,8 @@ def test_expired_verification_link(c):
 
 
 def test_signup_again_before_verifying_replaces_the_password(c):
-    from livejobs import mailer
-    from livejobs.orm import EmailToken
+    from jobmcp import mailer
+    from jobmcp.orm import EmailToken
 
     c.post(
         "/auth/register",
@@ -442,7 +442,7 @@ def test_signup_again_before_verifying_replaces_the_password(c):
 
 
 def test_password_reset_flow(c):
-    from livejobs import mailer
+    from jobmcp import mailer
 
     mk_user("u@x.io")
     h = login(c, "u@x.io")
@@ -508,8 +508,8 @@ def test_password_reset_flow(c):
 
 
 def test_reset_link_expires_and_new_request_replaces_old(c):
-    from livejobs import mailer
-    from livejobs.orm import EmailToken
+    from jobmcp import mailer
+    from jobmcp.orm import EmailToken
 
     mk_user("u@x.io")
     c.post("/auth/forgot", json={"email": "u@x.io"})
@@ -539,7 +539,7 @@ def test_reset_link_expires_and_new_request_replaces_old(c):
 
 
 def test_reset_also_confirms_an_unverified_address(c):
-    from livejobs import mailer
+    from jobmcp import mailer
 
     c.post("/auth/register", json={"email": "v@x.io", "password": PW})
     c.post("/auth/forgot", json={"email": "v@x.io"})
@@ -564,7 +564,7 @@ def test_reset_also_confirms_an_unverified_address(c):
 
 
 def test_verification_can_be_switched_off(c, monkeypatch):
-    from livejobs import config, mailer
+    from jobmcp import config, mailer
 
     monkeypatch.setattr(config, "REQUIRE_EMAIL_VERIFICATION", False)
     r = c.post("/auth/register", json={"email": "n@x.io", "password": PW})
@@ -595,7 +595,7 @@ def test_unverified_user_cannot_use_a_pre_existing_session(c):
 
 
 def test_auth_rate_limit(c, monkeypatch):
-    from livejobs import config
+    from jobmcp import config
 
     monkeypatch.setattr(config, "AUTH_RATE_PER_MIN", 3)
     codes = [
@@ -735,7 +735,7 @@ def test_public_stats_work_when_the_machine_has_only_just_booted(
     lifetime."""
     import time
 
-    from livejobs import api
+    from jobmcp import api
 
     monkeypatch.setitem(api._stats_cache, "at", None)
     monkeypatch.setitem(api._stats_cache, "v", None)

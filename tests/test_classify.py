@@ -1,6 +1,6 @@
 import pytest
 
-from livejobs import classify as c
+from jobmcp import classify as c
 
 
 @pytest.mark.parametrize(

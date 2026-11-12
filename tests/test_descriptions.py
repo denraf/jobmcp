@@ -6,8 +6,8 @@ import html as html_lib
 import pytest
 from sqlalchemy import select
 
-from livejobs import db
-from livejobs.models import (
+from jobmcp import db
+from jobmcp.models import (
     MAX_DESCRIPTION,
     TRUNCATION_NOTE,
     clean_html,
@@ -16,9 +16,9 @@ from livejobs.models import (
     split_images,
     strip_data_uris,
 )
-from livejobs.orm import Job
-from livejobs.services import sync
-from livejobs.vendors import VENDORS
+from jobmcp.orm import Job
+from jobmcp.services import sync
+from jobmcp.vendors import VENDORS
 
 from .helpers import fj, mk_board
 from .test_vendors import FakeResp, patch
@@ -310,7 +310,7 @@ class TestStoredAndServed:
             assert s.scalar(select(Job.description)) == "the whole description"
 
     def test_cli_sync_once_all(self, monkeypatch, capsys):
-        from livejobs import cli
+        from jobmcp import cli
 
         bid = mk_board()
         sync.sync_board(bid, lambda v, s: [fj("T", desc="short")])
@@ -330,7 +330,7 @@ class TestStoredAndServed:
     def test_the_api_returns_the_whole_description(self):
         from fastapi.testclient import TestClient
 
-        from livejobs.api import app
+        from jobmcp.api import app
 
         long = "Qualifications: " + "knows things. " * 2000 + LAST
         sync.sync_board(mk_board(), lambda v, s: [fj("T", desc=long)])
@@ -423,7 +423,7 @@ def test_html_images_with_data_uris_are_kept_as_pictures():
 
 
 def test_a_huge_picture_or_too_many_become_a_marker_not_a_cut():
-    from livejobs import models
+    from jobmcp import models
 
     big = "data:image/png;base64," + "A" * (models.MAX_IMAGE + 10)
     assert normalize_text(f"a [{big}] b") == "a [image] b"
@@ -486,8 +486,8 @@ def test_ashby_parser_keeps_the_picture(monkeypatch):
 def test_stored_whole_served_to_the_site_but_not_to_agents_or_search():
     from sqlalchemy import select as sel
 
-    from livejobs import mcp_server
-    from livejobs.services import search
+    from jobmcp import mcp_server
+    from jobmcp.services import search
 
     bid = mk_board("ashby", "Acme")
     desc = (
@@ -502,7 +502,7 @@ def test_stored_whole_served_to_the_site_but_not_to_agents_or_search():
             f"base64,{'A' * 5000}" in j.description
         )  # stored with the picture
         # the website's API returns it whole
-        from livejobs.api import job_out
+        from jobmcp.api import job_out
 
         assert "base64," in job_out(j, full=True)["description"]
         # an agent gets text only, and a small reply

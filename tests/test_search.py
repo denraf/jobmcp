@@ -1,9 +1,9 @@
 import pytest
 from sqlalchemy import select
 
-from livejobs import db
-from livejobs.orm import Job
-from livejobs.services import ServiceError, applications, auth, search, sync
+from jobmcp import db
+from jobmcp.orm import Job
+from jobmcp.services import ServiceError, applications, auth, search, sync
 
 from .helpers import fj, mk_board, mk_user
 
@@ -176,8 +176,8 @@ def test_applied_hidden_unless_requested_and_status_shown(uid):
 
 def test_closed_and_disabled_board_jobs_not_found(uid):
     with db.session() as s:
-        from livejobs.services import boards
-        from livejobs.orm import Board
+        from jobmcp.services import boards
+        from jobmcp.orm import Board
 
         bid = s.scalar(select(Board.id).where(Board.board == "beta"))
         boards.update_board(s, bid, status="disabled")

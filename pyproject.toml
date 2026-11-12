@@ -1,5 +1,5 @@
 [project]
-name = "livejobs"
+name = "jobmcp"
 version = "0.1.0"
 description = "Inventory every ATS job board via Common Crawl, then sweep them with per-vendor parsers."
 requires-python = ">=3.10"
@@ -18,17 +18,17 @@ dependencies = [
 dev = ["pytest>=8", "httpx>=0.27", "pyyaml>=6", "jinja2>=3", "ruff>=0.6"]
 
 [project.scripts]
-livejobs = "livejobs.cli:main"
+jobmcp = "jobmcp.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["livejobs*"]
+include = ["jobmcp*"]
 
 [tool.setuptools.package-data]
-livejobs = ["web/**/*"]
+jobmcp = ["web/**/*"]
 
 # PEP 8: pycodestyle errors and warnings (E, W), plus pyflakes (F) for unused names. 79 columns, as PEP 8 says.
 [tool.ruff]

@@ -1,7 +1,7 @@
 import pytest
 
-from livejobs.vendors import VENDORS, classify
-from livejobs.vendors.workday import _posted
+from jobmcp.vendors import VENDORS, classify
+from jobmcp.vendors.workday import _posted
 from datetime import date
 
 
@@ -84,7 +84,7 @@ class FakeResp:
 
 
 def patch(monkeypatch, resp):
-    from livejobs import http
+    from jobmcp import http
 
     monkeypatch.setattr(http, "get", lambda *a, **k: resp)
     monkeypatch.setattr(http, "post", lambda *a, **k: resp)
@@ -203,7 +203,7 @@ def test_smartrecruiters_paginates(monkeypatch):
             }
         ),
     ]
-    from livejobs import http
+    from jobmcp import http
 
     monkeypatch.setattr(http, "get", lambda *a, **k: pages.pop(0))
     jobs = VENDORS["smartrecruiters"].fetch("Co")
@@ -310,7 +310,7 @@ def test_workday_paginates(monkeypatch):
             }
         ),
     ]
-    from livejobs import http
+    from jobmcp import http
 
     monkeypatch.setattr(http, "post", lambda *a, **k: pages.pop(0))
     jobs = VENDORS["workday"].fetch("nvidia.wd5/Site")
@@ -370,7 +370,7 @@ def test_icims_posting_json_ld():
 
 
 def test_icims_fetch_reads_the_sitemap_then_each_new_posting(monkeypatch):
-    from livejobs import http
+    from jobmcp import http
 
     pages = {"sitemap": FakeResp(content=ICIMS_SITEMAP)}
     seen = []
@@ -404,8 +404,8 @@ def test_icims_fetch_reads_the_sitemap_then_each_new_posting(monkeypatch):
 
 
 def test_icims_not_a_sitemap_is_a_soft_block_not_an_empty_board(monkeypatch):
-    from livejobs import http
-    from livejobs.vendors.base import SoftBlocked
+    from jobmcp import http
+    from jobmcp.vendors.base import SoftBlocked
 
     monkeypatch.setattr(
         http,
@@ -457,7 +457,7 @@ def test_paylocity_parse(monkeypatch):
 
 
 def test_paylocity_page_without_a_job_list_is_a_soft_block(monkeypatch):
-    from livejobs.vendors.base import SoftBlocked
+    from jobmcp.vendors.base import SoftBlocked
 
     patch(
         monkeypatch,
@@ -469,8 +469,8 @@ def test_paylocity_page_without_a_job_list_is_a_soft_block(monkeypatch):
 
 # ── Workday throttling ──────────────────────────────────────────────────
 def test_workday_total_changing_midway_is_a_soft_block(monkeypatch):
-    from livejobs import http
-    from livejobs.vendors.base import SoftBlocked
+    from jobmcp import http
+    from jobmcp.vendors.base import SoftBlocked
 
     pages = iter(
         [
@@ -493,8 +493,8 @@ def test_workday_total_changing_midway_is_a_soft_block(monkeypatch):
 
 
 def test_workday_empty_page_before_the_total_is_a_soft_block(monkeypatch):
-    from livejobs import http
-    from livejobs.vendors.base import SoftBlocked
+    from jobmcp import http
+    from jobmcp.vendors.base import SoftBlocked
 
     pages = iter(
         [
@@ -516,7 +516,7 @@ def test_workday_empty_page_before_the_total_is_a_soft_block(monkeypatch):
 def test_workday_total_is_only_given_on_the_first_page(monkeypatch):
     """Real Workday answers `total` on page one and 0 afterwards. That is
     normal, not throttling."""
-    from livejobs import http
+    from jobmcp import http
 
     def page(n, total):
         return {

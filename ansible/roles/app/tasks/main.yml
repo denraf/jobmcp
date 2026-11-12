@@ -8,7 +8,7 @@
       - git
       - curl
       - tar
-      - acl      # lets Ansible hand files to the unprivileged livejobs user
+      - acl      # lets Ansible hand files to the unprivileged jobmcp user
       - ufw
     state: present
     update_cache: true
@@ -16,9 +16,9 @@
 
 - name: Unprivileged service user
   ansible.builtin.user:
-    name: "{{ livejobs_user }}"
+    name: "{{ jobmcp_user }}"
     system: true
-    home: "{{ livejobs_app_dir }}"
+    home: "{{ jobmcp_app_dir }}"
     create_home: false
     shell: /usr/sbin/nologin
 
@@ -27,15 +27,15 @@
     path: "{{ item.path }}"
     state: directory
     owner: "{{ item.owner }}"
-    group: "{{ livejobs_user }}"
+    group: "{{ jobmcp_user }}"
     mode: "{{ item.mode }}"
   loop:
-    - { path: "{{ livejobs_app_dir }}", owner: "{{ livejobs_user }}", mode: "0755" }
-    - { path: /etc/livejobs, owner: root, mode: "0750" }
+    - { path: "{{ jobmcp_app_dir }}", owner: "{{ jobmcp_user }}", mode: "0755" }
+    - { path: /etc/jobmcp, owner: root, mode: "0750" }
 
 # ── the code ────────────────────────────────────────────────────────────
 - name: Pack this checkout (archive mode)
-  when: livejobs_source == 'archive'
+  when: jobmcp_source == 'archive'
   delegate_to: localhost
   become: false
   run_once: true
@@ -43,7 +43,7 @@
     argv:
       - tar
       - -czf
-      - /tmp/livejobs-src.tgz
+      - /tmp/jobmcp-src.tgz
       - -C
       - "{{ playbook_dir }}/.."
       - --exclude=./.venv
@@ -62,44 +62,44 @@
   changed_when: false
 
 - name: Unpack it on the web server
-  when: livejobs_source == 'archive'
+  when: jobmcp_source == 'archive'
   ansible.builtin.unarchive:
-    src: /tmp/livejobs-src.tgz
-    dest: "{{ livejobs_app_dir }}"
-    owner: "{{ livejobs_user }}"
-    group: "{{ livejobs_user }}"
+    src: /tmp/jobmcp-src.tgz
+    dest: "{{ jobmcp_app_dir }}"
+    owner: "{{ jobmcp_user }}"
+    group: "{{ jobmcp_user }}"
   register: code_archive
-  notify: Restart livejobs
+  notify: Restart jobmcp
 
 - name: Fetch the code (git mode)
-  when: livejobs_source == 'git'
+  when: jobmcp_source == 'git'
   ansible.builtin.git:
-    repo: "{{ livejobs_git_repo }}"
-    dest: "{{ livejobs_app_dir }}"
-    version: "{{ livejobs_git_version }}"
-  become_user: "{{ livejobs_user }}"
+    repo: "{{ jobmcp_git_repo }}"
+    dest: "{{ jobmcp_app_dir }}"
+    version: "{{ jobmcp_git_version }}"
+  become_user: "{{ jobmcp_user }}"
   register: code_git
-  notify: Restart livejobs
+  notify: Restart jobmcp
 
 - name: Python environment and dependencies
   ansible.builtin.pip:
-    name: "{{ livejobs_app_dir }}"
+    name: "{{ jobmcp_app_dir }}"
     editable: true
-    virtualenv: "{{ livejobs_app_dir }}/.venv"
+    virtualenv: "{{ jobmcp_app_dir }}/.venv"
     virtualenv_command: python3 -m venv
-  become_user: "{{ livejobs_user }}"
-  notify: Restart livejobs
+  become_user: "{{ jobmcp_user }}"
+  notify: Restart jobmcp
 
 # ── settings ────────────────────────────────────────────────────────────
 - name: Settings file, which holds secrets (root-owned, readable by the service group)
   ansible.builtin.template:
-    src: livejobs.env.j2
-    dest: /etc/livejobs/livejobs.env
+    src: jobmcp.env.j2
+    dest: /etc/jobmcp/jobmcp.env
     owner: root
-    group: "{{ livejobs_user }}"
+    group: "{{ jobmcp_user }}"
     mode: "0640"
   no_log: true
-  notify: Restart livejobs
+  notify: Restart jobmcp
 
 - name: Systemd units
   ansible.builtin.template:
@@ -108,10 +108,10 @@
     owner: root
     group: root
     mode: "0644"
-  loop: [livejobs-web, livejobs-scheduler]
+  loop: [jobmcp-web, jobmcp-scheduler]
   notify:
     - Reload systemd
-    - Restart livejobs
+    - Restart jobmcp
 
 # ── database schema and first admin ─────────────────────────────────────
 - name: The database server answers
@@ -121,17 +121,17 @@
     timeout: 60
 
 - name: Create or upgrade the tables
-  ansible.builtin.command: "{{ livejobs_app_dir }}/deploy/bin/livejobs-admin init-db"
-  become_user: "{{ livejobs_user }}"
+  ansible.builtin.command: "{{ jobmcp_app_dir }}/deploy/bin/jobmcp-admin init-db"
+  become_user: "{{ jobmcp_user }}"
   register: init_db
   changed_when: false
 
 - name: First admin (an existing account is never changed)
   ansible.builtin.command: >-
-    {{ livejobs_app_dir }}/deploy/bin/livejobs-admin ensure-admin --email {{ livejobs_admin_email | quote }}
-  become_user: "{{ livejobs_user }}"
+    {{ jobmcp_app_dir }}/deploy/bin/jobmcp-admin ensure-admin --email {{ jobmcp_admin_email | quote }}
+  become_user: "{{ jobmcp_user }}"
   environment:
-    LIVEJOBS_ADMIN_PASSWORD: "{{ vault_admin_password }}"
+    JOBMCP_ADMIN_PASSWORD: "{{ vault_admin_password }}"
   register: ensure_admin
   changed_when: "'created admin' in ensure_admin.stdout"
   no_log: true
@@ -145,11 +145,11 @@
     name: "{{ item }}"
     state: started
     enabled: true
-  loop: [livejobs-web, livejobs-scheduler]
+  loop: [jobmcp-web, jobmcp-scheduler]
 
 - name: The app answers on its local port
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ livejobs_port }}/healthz"
+    url: "http://127.0.0.1:{{ jobmcp_port }}/healthz"
     return_content: true
   register: health
   retries: 20
