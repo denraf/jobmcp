@@ -1,0 +1,71 @@
+# The whole stack, in containers:  db (MySQL)  +  web (site, API, MCP)  +  scheduler (hourly job fetch, monthly Common Crawl refresh)
+#
+#   docker compose up -d --build     # Docker.   Apple's container (macOS 26): container-compose build && container-compose up -d
+#   docker compose logs web          # the first start prints the generated admin password; with the default
+#                                    # LIVEJOBS_MAIL_BACKEND=console it also prints every verification / reset link
+#   open http://localhost:8000
+#   docker compose down              # stop (the database lives in a volume and survives)
+#
+# Settings: edit docker/app.env. This file deliberately has no ${VARIABLE} substitution, so it behaves the same in
+# Docker Compose and in Apple's container-compose (which does not expand it).
+#
+# `scripts/dev.sh` and `scripts/test.sh` use only the `db` service from this file (databases livejobs_dev and
+# livejobs_test) and run the app / tests on your machine. For a real server see docs/INSTALL.md.
+#
+# Apple's container needs ONE extra step, once: `sudo container system dns create livejobs` (it has no service-name DNS
+# otherwise; the app containers then reach MySQL as db.livejobs).
+#
+# Verified with Apple's `container-compose` (macOS 26). Not run with Docker itself in this project's checks (no Docker
+# daemon was available); the file uses only plain Compose features.
+name: livejobs
+
+services:
+  db:
+    image: mysql:8.4
+    # `db.livejobs` is the name Apple's container resolves once its DNS domain is registered
+    # (`sudo container system dns create livejobs`, once); the alias makes the same name work in Docker Compose.
+    networks:
+      default:
+        aliases: [db.livejobs]
+    environment:
+      MYSQL_DATABASE: livejobs_dev
+      MYSQL_USER: livejobs
+      MYSQL_PASSWORD: livejobs
+      MYSQL_ROOT_PASSWORD: root
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    ports: ["127.0.0.1:3306:3306"]
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+
+  web:
+    build: .
+    image: livejobs:local
+    depends_on: [db]
+    ports: ["127.0.0.1:8000:8000"]
+    env_file: [docker/app.env]
+    environment:
+      LIVEJOBS_DATABASE_URL: mysql+pymysql://livejobs:livejobs@db.livejobs:3306/livejobs_dev?charset=utf8mb4
+      LIVEJOBS_RUN_MIGRATIONS: "1"
+    restart: unless-stopped
+
+  # The recurring jobs, with no cron needed: fetch the latest job posts every hour, refresh the Common Crawl
+  # inventory once a month. Same image as web; it waits for web to finish preparing the database.
+  scheduler:
+    build: .
+    image: livejobs:local
+    depends_on: [db, web]
+    command: ["livejobs", "scheduler"]
+    env_file: [docker/app.env]
+    environment:
+      LIVEJOBS_DATABASE_URL: mysql+pymysql://livejobs:livejobs@db.livejobs:3306/livejobs_dev?charset=utf8mb4
+    restart: unless-stopped
+
+volumes:
+  dbdata:

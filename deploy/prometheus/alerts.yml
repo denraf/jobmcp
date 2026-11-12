@@ -1,0 +1,108 @@
+groups:
+  - name: livejobs
+    rules:
+      - alert: LivejobsDown
+        expr: up{job="livejobs"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "livejobs web is not answering scrapes"
+
+      - alert: LivejobsDatabaseDown
+        expr: livejobs_db_up == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "livejobs can't reach its database"
+
+      - alert: LivejobsSyncStale
+        # The hourly sync should succeed at least once every couple of hours.
+        expr: time() - livejobs_sync_last_success_timestamp_seconds > 3 * 3600 and livejobs_sync_last_success_timestamp_seconds > 0
+        for: 10m
+        labels: {severity: warn}
+        annotations:
+          summary: "No board has synced successfully for over 3 hours (is the cron/timer running?)"
+
+      - alert: LivejobsInventoryStale
+        # Refreshed monthly (retried daily on days 5-12). More than 45 days without a complete run means it is broken.
+        expr: time() - livejobs_inventory_last_success_timestamp_seconds > 45 * 86400 and livejobs_inventory_last_success_timestamp_seconds > 0
+        for: 1h
+        labels: {severity: warn}
+        annotations:
+          summary: "The monthly Common Crawl refresh hasn't completed in over 45 days (check the livejobs-inventory timer/cron log)"
+
+      - alert: LivejobsBoardsOverdue
+        expr: livejobs_boards_overdue > 25
+        for: 1h
+        labels: {severity: warn}
+        annotations:
+          summary: "{{ $value }} enabled boards are more than 30 minutes past their sync time"
+
+      - alert: LivejobsSyncErrorRateHigh
+        expr: |
+          increase(livejobs_sync_runs_total{outcome="error"}[6h])
+            / clamp_min(increase(livejobs_sync_runs_total[6h]), 1) > 0.5
+        for: 30m
+        labels: {severity: warn}
+        annotations:
+          summary: "More than half of board syncs failed over the last 6 hours"
+
+      - alert: LivejobsNoOpenJobs
+        expr: sum(livejobs_jobs_active) == 0 and livejobs_sync_last_success_timestamp_seconds > 0
+        for: 30m
+        labels: {severity: warn}
+        annotations:
+          summary: "Syncing succeeds but there are no open jobs (are any boards enabled?)"
+
+      - alert: LivejobsServerErrors
+        expr: sum(rate(livejobs_http_requests_total{status=~"5.."}[10m])) > 0.1
+        for: 10m
+        labels: {severity: warn}
+        annotations:
+          summary: "livejobs is returning 5xx responses"
+
+      - alert: LivejobsEmailFailures
+        expr: increase(livejobs_emails_total{outcome="failed"}[1h]) > 3
+        labels: {severity: warn}
+        annotations:
+          summary: "Verification / reset emails are failing to send (check SMTP settings: livejobs send-test-email)"
+
+      - alert: LivejobsAuthFloods
+        expr: sum(rate(livejobs_auth_events_total{event="login_failed"}[10m])) > 1
+        for: 10m
+        labels: {severity: info}
+        annotations:
+          summary: "Many failed logins: possible credential-stuffing"
+
+      - alert: LivejobsPlatformJobsDropped
+        # A platform's open postings fell far outside their usual range (3+
+        # standard deviations and 10%+). That is what a broken parser or a
+        # vendor blocking us looks like from here, long before anyone notices.
+        expr: livejobs_vendor_anomaly{direction="drop"} == 1
+        for: 1h
+        labels: {severity: warn}
+        annotations:
+          summary: "{{ $labels.vendor }} lost most of its open postings. Check the Platform health table in the admin portal and run `livejobs canary --vendor {{ $labels.vendor }}`"
+
+      - alert: LivejobsPlatformJobsSpiked
+        expr: livejobs_vendor_anomaly{direction="spike"} == 1
+        for: 1h
+        labels: {severity: info}
+        annotations:
+          summary: "{{ $labels.vendor }} has far more open postings than usual (a parser returning duplicates?)"
+
+      - alert: LivejobsCanaryFailing
+        # The daily live check could not turn a known board into real
+        # postings: the platform's API or markup changed.
+        expr: livejobs_canary_ok == 0
+        for: 1h
+        labels: {severity: warn}
+        annotations:
+          summary: "The live check of {{ $labels.vendor }} fails: its parser probably needs updating"
+
+      - alert: LivejobsCanaryStale
+        expr: time() - livejobs_canary_checked_timestamp_seconds > 2 * 86400
+        for: 1h
+        labels: {severity: warn}
+        annotations:
+          summary: "The daily platform check for {{ $labels.vendor }} has not run for two days (is the scheduler running?)"

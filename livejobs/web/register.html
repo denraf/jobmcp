@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create an account | livejobs</title>
+<meta name="description" content="Create a free livejobs account with just an email and password.">
+<meta name="color-scheme" content="light">
+<link rel="preload" href="/static/fonts/Inter.woff2" as="font" type="font/woff2" crossorigin>
+<script src="/static/js/theme.js"></script>
+<link rel="stylesheet" href="/static/css/site.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23f4dc5a'/%3E%3Cpath d='M9 8v16h4V8z M17 14h6v10h-6z' fill='%230f2530'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="site-head" id="site-head"></header>
+<main id="main" class="auth" data-mode="register">
+<div class="wrap">
+  <div>
+    <h1 id="page-title">Create an account</h1>
+    <form id="form" novalidate>
+      <div class="field"><label for="email">Email</label><input class="input" id="email" name="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="password">Password</label><input class="input" id="password" name="password" type="password" autocomplete="new-password" minlength="10" required aria-describedby="pw-hint"><p class="hint" id="pw-hint">At least 10 characters.</p></div>
+      <p class="form-error" id="error" role="alert"></p>
+      <button class="btn btn-stamp" type="submit">Create account</button>
+      <p class="small muted ui mt5">Already have one? <a href="/login">Sign in</a>.</p>
+    </form>
+    <p class="notice ui small muted" id="closed" hidden>Registration is closed right now.</p>
+    <div id="sent" hidden>
+      <h1>Check your email</h1>
+      <p class="lede">If <strong id="sent-to"></strong> can be used for an account, we’ve sent it a link to confirm it. The link works once and lasts 24 hours.</p>
+      <p class="small muted ui">Nothing there after a few minutes? Check spam, or <button class="btn-link" id="resend" type="button">send it again</button>.</p>
+      <p class="form-ok ui small" id="resent" role="status"></p>
+    </div>
+  </div>
+  <aside class="auth-aside">
+    <h2>That’s all we ask for</h2>
+    <ul class="plain-list small">
+      <li>No résumé upload.</li>
+      <li>No name, phone number or address.</li>
+      <li>Your agent keeps those and uses them when it applies.</li>
+    </ul>
+    <p class="small muted ui mt4"><a href="/privacy">See everything we store</a></p>
+  </aside>
+</div>
+</main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="module" src="/static/js/auth.js"></script>
+</body>
+</html>

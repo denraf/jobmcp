@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forgot your password | livejobs</title>
+<meta name="description" content="Get a link to choose a new password.">
+<meta name="color-scheme" content="light">
+<link rel="preload" href="/static/fonts/Inter.woff2" as="font" type="font/woff2" crossorigin>
+<script src="/static/js/theme.js"></script>
+<link rel="stylesheet" href="/static/css/site.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23f4dc5a'/%3E%3Cpath d='M9 8v16h4V8z M17 14h6v10h-6z' fill='%230f2530'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="site-head" id="site-head"></header>
+<main id="main" class="auth">
+<div class="wrap">
+  <div>
+    <h1>Forgot your password</h1>
+    <form id="form" novalidate>
+      <p>Enter your email address and we’ll send you a link to choose a new password.</p>
+      <div class="field"><label for="email">Email</label><input class="input" id="email" name="email" type="email" autocomplete="email" required></div>
+      <p class="form-error" id="error" role="alert"></p>
+      <button class="btn btn-stamp" type="submit">Send the link</button>
+      <p class="small muted ui mt5"><a href="/login">Back to sign in</a></p>
+    </form>
+    <div id="done" hidden>
+      <p class="lede">Check your inbox.</p>
+      <p>If that address has an account, a link to choose a new password is on its way. It works once and expires in an hour.</p>
+      <p class="small muted ui mt5"><a href="/login">Back to sign in</a></p>
+    </div>
+  </div>
+  <aside class="auth-aside">
+    <h2>Good to know</h2>
+    <ul class="plain-list small"><li>Resetting signs you out everywhere.</li><li>Your agent tokens keep working. Revoke any you don’t trust from your portal.</li></ul>
+  </aside>
+</div>
+</main>
+<footer class="site-foot" id="site-foot"></footer>
+<script type="module" src="/static/js/forgot.js"></script>
+</body>
+</html>

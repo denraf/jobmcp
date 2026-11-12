@@ -1,0 +1,27 @@
+# Managed by Ansible.
+[Unit]
+Description=livejobs web (site, REST API and MCP endpoint)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ livejobs_user }}
+Group={{ livejobs_user }}
+WorkingDirectory={{ livejobs_app_dir }}
+EnvironmentFile=/etc/livejobs/livejobs.env
+ExecStart={{ livejobs_app_dir }}/.venv/bin/livejobs serve --host 127.0.0.1 --port {{ livejobs_port }}
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

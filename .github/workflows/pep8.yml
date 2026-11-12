@@ -1,0 +1,32 @@
+name: PEP 8
+
+# Every pull request (and every push to main) must follow PEP 8:
+#   ruff check   -> pycodestyle errors and warnings (E, W) and pyflakes (F), 79 columns
+#   ruff format  -> the code is already formatted; the PR changes nothing when it is run
+# Settings live in pyproject.toml ([tool.ruff]). To fix a failure locally:
+#   pip install ruff && ruff format . && ruff check --fix .
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pep8:
+    name: ruff (PEP 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install "ruff==0.17.4"
+      - name: Check style (PEP 8)
+        run: ruff check --output-format=github .
+      - name: Check formatting
+        run: ruff format --check --diff .

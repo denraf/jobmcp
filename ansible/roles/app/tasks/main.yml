@@ -1,0 +1,174 @@
+---
+- name: System packages
+  ansible.builtin.apt:
+    name:
+      - python3
+      - python3-venv
+      - python3-pip
+      - git
+      - curl
+      - tar
+      - acl      # lets Ansible hand files to the unprivileged livejobs user
+      - ufw
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Unprivileged service user
+  ansible.builtin.user:
+    name: "{{ livejobs_user }}"
+    system: true
+    home: "{{ livejobs_app_dir }}"
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Folders
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ livejobs_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ livejobs_app_dir }}", owner: "{{ livejobs_user }}", mode: "0755" }
+    - { path: /etc/livejobs, owner: root, mode: "0750" }
+
+# ── the code ────────────────────────────────────────────────────────────
+- name: Pack this checkout (archive mode)
+  when: livejobs_source == 'archive'
+  delegate_to: localhost
+  become: false
+  run_once: true
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -czf
+      - /tmp/livejobs-src.tgz
+      - -C
+      - "{{ playbook_dir }}/.."
+      - --exclude=./.venv
+      - --exclude=./.git
+      - --exclude=./ansible
+      - --exclude=./tests
+      - --exclude=./.gstack
+      - --exclude=./.local
+      - --exclude=./.pytest_cache
+      - --exclude=./.ruff_cache
+      - --exclude=./*.egg-info
+      - --exclude=__pycache__
+      - .
+  environment:
+    COPYFILE_DISABLE: "1"    # macOS tar: no ._ metadata files
+  changed_when: false
+
+- name: Unpack it on the web server
+  when: livejobs_source == 'archive'
+  ansible.builtin.unarchive:
+    src: /tmp/livejobs-src.tgz
+    dest: "{{ livejobs_app_dir }}"
+    owner: "{{ livejobs_user }}"
+    group: "{{ livejobs_user }}"
+  register: code_archive
+  notify: Restart livejobs
+
+- name: Fetch the code (git mode)
+  when: livejobs_source == 'git'
+  ansible.builtin.git:
+    repo: "{{ livejobs_git_repo }}"
+    dest: "{{ livejobs_app_dir }}"
+    version: "{{ livejobs_git_version }}"
+  become_user: "{{ livejobs_user }}"
+  register: code_git
+  notify: Restart livejobs
+
+- name: Python environment and dependencies
+  ansible.builtin.pip:
+    name: "{{ livejobs_app_dir }}"
+    editable: true
+    virtualenv: "{{ livejobs_app_dir }}/.venv"
+    virtualenv_command: python3 -m venv
+  become_user: "{{ livejobs_user }}"
+  notify: Restart livejobs
+
+# ── settings ────────────────────────────────────────────────────────────
+- name: Settings file, which holds secrets (root-owned, readable by the service group)
+  ansible.builtin.template:
+    src: livejobs.env.j2
+    dest: /etc/livejobs/livejobs.env
+    owner: root
+    group: "{{ livejobs_user }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart livejobs
+
+- name: Systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.service.j2"
+    dest: "/etc/systemd/system/{{ item }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [livejobs-web, livejobs-scheduler]
+  notify:
+    - Reload systemd
+    - Restart livejobs
+
+# ── database schema and first admin ─────────────────────────────────────
+- name: The database server answers
+  ansible.builtin.wait_for:
+    host: "{{ db_host }}"
+    port: "{{ db_port }}"
+    timeout: 60
+
+- name: Create or upgrade the tables
+  ansible.builtin.command: "{{ livejobs_app_dir }}/deploy/bin/livejobs-admin init-db"
+  become_user: "{{ livejobs_user }}"
+  register: init_db
+  changed_when: false
+
+- name: First admin (an existing account is never changed)
+  ansible.builtin.command: >-
+    {{ livejobs_app_dir }}/deploy/bin/livejobs-admin ensure-admin --email {{ livejobs_admin_email | quote }}
+  become_user: "{{ livejobs_user }}"
+  environment:
+    LIVEJOBS_ADMIN_PASSWORD: "{{ vault_admin_password }}"
+  register: ensure_admin
+  changed_when: "'created admin' in ensure_admin.stdout"
+  no_log: true
+
+# ── start ───────────────────────────────────────────────────────────────
+- name: Apply unit changes before starting
+  ansible.builtin.meta: flush_handlers
+
+- name: Web app and scheduler are running
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop: [livejobs-web, livejobs-scheduler]
+
+- name: The app answers on its local port
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ livejobs_port }}/healthz"
+    return_content: true
+  register: health
+  retries: 20
+  delay: 3
+  until: health.status == 200
+
+- name: Firewall (SSH, HTTP and HTTPS)
+  when: web_manage_firewall | bool
+  block:
+    - name: Allow SSH first, so enabling the firewall cannot lock you out
+      ansible.builtin.command: ufw allow OpenSSH
+      register: ufw_ssh
+      changed_when: "'Skipping' not in ufw_ssh.stdout"
+
+    - name: Allow web traffic
+      ansible.builtin.command: ufw allow 80,443/tcp
+      register: ufw_web
+      changed_when: "'Skipping' not in ufw_web.stdout"
+
+    - name: Turn the firewall on
+      ansible.builtin.command: ufw --force enable
+      changed_when: false

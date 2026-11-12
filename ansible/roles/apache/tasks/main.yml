@@ -1,0 +1,52 @@
+---
+# Apache is already installed and serving other sites. Nothing here touches those: this adds modules, one vhost file
+# for livejobs_domain, and (optionally) one certificate.
+- name: Packages
+  ansible.builtin.apt:
+    name: "{{ ['apache2'] + (['certbot', 'python3-certbot-apache'] if apache_certbot | bool else []) }}"
+    state: present
+    cache_valid_time: 3600
+
+- name: Modules the reverse proxy needs
+  ansible.builtin.command: a2enmod proxy proxy_http headers rewrite ssl setenvif alias
+  register: a2enmod
+  changed_when: "'Enabling module' in a2enmod.stdout"
+  notify: Restart apache2   # a newly enabled module needs a restart, not just a reload
+
+- name: Apply module changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Site (HTTP only until a certificate exists)
+  ansible.builtin.include_tasks: vhost.yml
+
+- name: Make that site live (the Let's Encrypt challenge must reach this server)
+  ansible.builtin.meta: flush_handlers
+
+- name: Certificate
+  when: apache_certbot | bool and not cert.stat.exists
+  block:
+    - name: Obtain the certificate (renews itself through certbot's systemd timer)
+      ansible.builtin.command: >-
+        certbot certonly --apache --non-interactive --agree-tos
+        -m {{ certbot_email | quote }} -d {{ livejobs_domain | quote }}
+        --deploy-hook "systemctl reload apache2"
+      args:
+        creates: "{{ apache_cert_file }}"
+
+    - name: Site again, now with HTTPS
+      ansible.builtin.include_tasks: vhost.yml
+
+- name: Apply the site
+  ansible.builtin.meta: flush_handlers
+
+- name: HTTPS answers through Apache, and /metrics is not public
+  when: cert.stat.exists
+  ansible.builtin.uri:
+    url: "https://{{ livejobs_domain }}{{ item.path }}"
+    status_code: "{{ item.status }}"
+  loop:
+    - { path: /healthz, status: 200 }
+    - { path: /metrics, status: 404 }
+  delegate_to: localhost
+  become: false
+  run_once: true

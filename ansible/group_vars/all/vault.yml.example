@@ -1,0 +1,8 @@
+---
+# Copy to group_vars/all/vault.yml, fill in, then encrypt:   ansible-vault encrypt group_vars/all/vault.yml
+# Passwords: letters and digits only (e.g. `openssl rand -hex 24`). The database password goes inside a URL, and the
+# env file is read by systemd and by bash, so no $ or ' characters.
+vault_db_password: CHANGE_ME
+vault_db_backup_password: CHANGE_ME
+vault_admin_password: CHANGE_ME_long_and_unique
+vault_smtp_password: CHANGE_ME

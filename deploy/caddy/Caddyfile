@@ -1,0 +1,18 @@
+# /etc/caddy/Caddyfile : automatic HTTPS (Let's Encrypt). Replace the hostname.
+jobs.example.com {
+	encode zstd gzip
+
+	# Metrics are for Prometheus on this machine only; never serve them to the internet.
+	@metrics path /metrics /metrics/*
+	respond @metrics 404
+
+	# Caddy adds X-Forwarded-For; livejobs (LIVEJOBS_TRUST_PROXY=1) reads it for rate limiting.
+	reverse_proxy 127.0.0.1:8000 {
+		# MCP over streamable HTTP can stream responses; don't buffer them.
+		flush_interval -1
+	}
+
+	log {
+		output file /var/log/caddy/livejobs.log
+	}
+}

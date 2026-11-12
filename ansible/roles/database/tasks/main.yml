@@ -1,0 +1,112 @@
+---
+- name: Install MySQL
+  ansible.builtin.apt:
+    name: [mysql-server, ufw]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Listen on the private address, and settings the app needs
+  ansible.builtin.template:
+    src: livejobs.cnf.j2
+    dest: /etc/mysql/mysql.conf.d/zz-livejobs.cnf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart mysql
+
+- name: Apply the MySQL settings now
+  ansible.builtin.meta: flush_handlers
+
+- name: MySQL is running
+  ansible.builtin.service:
+    name: mysql
+    state: started
+    enabled: true
+
+# root reaches MySQL over its local socket (auth_socket), so no password is needed here. The statements are
+# idempotent, and the passwords are checked to be letters and digits, so they are safe inside the SQL.
+- name: Database, application user and backup user
+  ansible.builtin.command: mysql
+  args:
+    stdin: |
+      CREATE DATABASE IF NOT EXISTS `{{ db_name }}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+      CREATE USER IF NOT EXISTS '{{ db_user }}'@'{{ db_client_address }}' IDENTIFIED BY '{{ vault_db_password }}';
+      ALTER USER '{{ db_user }}'@'{{ db_client_address }}' IDENTIFIED BY '{{ vault_db_password }}';
+      GRANT ALL PRIVILEGES ON `{{ db_name }}`.* TO '{{ db_user }}'@'{{ db_client_address }}';
+      CREATE USER IF NOT EXISTS '{{ db_backup_user }}'@'localhost' IDENTIFIED BY '{{ vault_db_backup_password }}';
+      ALTER USER '{{ db_backup_user }}'@'localhost' IDENTIFIED BY '{{ vault_db_backup_password }}';
+      GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES ON `{{ db_name }}`.* TO '{{ db_backup_user }}'@'localhost';
+  changed_when: false
+  no_log: true
+
+- name: Firewall
+  when: db_manage_firewall | bool
+  block:
+    - name: Always keep SSH open
+      ansible.builtin.command: ufw allow OpenSSH
+      register: ufw_ssh
+      changed_when: "'Skipping' not in ufw_ssh.stdout"
+
+    - name: The database port, from the web server only
+      ansible.builtin.command: >-
+        ufw allow proto tcp from {{ db_client_address }} to {{ db_bind_address }} port {{ db_port }}
+      register: ufw_db
+      changed_when: "'Skipping' not in ufw_db.stdout"
+
+    - name: Turn the firewall on
+      ansible.builtin.command: ufw --force enable
+      register: ufw_on
+      changed_when: "'already' not in ufw_on.stdout and 'active' not in ufw_on.stdout"
+
+# ── nightly backup ──────────────────────────────────────────────────────
+- name: Backup user
+  ansible.builtin.user:
+    name: livejobs-backup
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/backups/livejobs
+    create_home: false
+
+- name: Backup folder
+  ansible.builtin.file:
+    path: /var/backups/livejobs
+    state: directory
+    owner: livejobs-backup
+    group: livejobs-backup
+    mode: "0750"
+
+- name: Backup credentials (readable by the backup user only)
+  ansible.builtin.copy:
+    dest: /etc/livejobs-backup.my.cnf
+    owner: livejobs-backup
+    group: livejobs-backup
+    mode: "0600"
+    content: |
+      [client]
+      user={{ db_backup_user }}
+      password={{ vault_db_backup_password }}
+  no_log: true
+
+- name: Backup script (the one in this repository)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../deploy/bin/livejobs-backup.sh"
+    dest: /usr/local/bin/livejobs-backup.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Nightly at 03:15, keeping the last {{ db_backup_keep }}
+  ansible.builtin.copy:
+    dest: /etc/cron.d/livejobs-backup
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible.
+      SHELL=/bin/bash
+      PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      LIVEJOBS_DB_NAME={{ db_name }}
+      LIVEJOBS_BACKUP_KEEP={{ db_backup_keep }}
+      LIVEJOBS_MYSQL_DEFAULTS=/etc/livejobs-backup.my.cnf
+      15 3 * * * livejobs-backup /usr/local/bin/livejobs-backup.sh >> /var/backups/livejobs/backup.log 2>&1

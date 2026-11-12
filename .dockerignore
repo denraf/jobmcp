@@ -1,0 +1,13 @@
+.git
+.gstack
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.egg-info
+tests
+docs
+deploy
+scripts
+docker-compose.yml
+.env

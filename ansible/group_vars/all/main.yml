@@ -1,0 +1,58 @@
+---
+# ── what you must set ───────────────────────────────────────────────────
+livejobs_domain: jobs.example.com        # the public name; its DNS A/AAAA record must point at the web VM
+livejobs_admin_email: admin@example.com  # the first admin (created once; an existing account is never touched)
+certbot_email: admin@example.com         # Let's Encrypt expiry notices go here
+
+# Email: signups confirm by link, so mail must work (see docs/INSTALL.md, "Email").
+smtp_host: smtp.example.com
+smtp_port: 587
+smtp_user: CHANGE_ME
+smtp_security: starttls                  # starttls | ssl | none
+mail_from: "livejobs <no-reply@jobs.example.com>"
+
+# ── how the code gets to the web VM ─────────────────────────────────────
+# archive: tar this checkout on your machine and unpack it on the VM (no git server needed).
+# git:     clone livejobs_git_repo at livejobs_git_version on the VM.
+livejobs_source: archive
+livejobs_git_repo: ""
+livejobs_git_version: main
+
+# ── database ────────────────────────────────────────────────────────────
+db_name: livejobs
+db_user: livejobs
+db_backup_user: livejobs_backup
+db_port: 3306
+# The database VM listens on its private address; the app connects to it; MySQL accepts the app user only from the
+# web VM's private address. Defaults come from private_ip in the inventory.
+db_bind_address: "{{ hostvars[groups['db'][0]].private_ip }}"
+db_host: "{{ db_bind_address }}"
+db_client_address: "{{ hostvars[groups['web'][0]].private_ip }}"
+# MySQL's buffer pool. About half the database VM's RAM is a good value (the default suits 2 GB).
+mysql_innodb_buffer_pool_size: 1G
+mysql_max_allowed_packet: 64M
+db_backup_keep: 14
+
+# ── app ─────────────────────────────────────────────────────────────────
+livejobs_user: livejobs
+livejobs_app_dir: /opt/livejobs
+livejobs_port: 8000                      # the app listens on 127.0.0.1 only; Apache forwards to it
+livejobs_allow_registration: 1
+# Any other LIVEJOBS_* setting from docs/INSTALL.md, without the prefix.
+livejobs_env_extra:
+  SYNC_WORKERS: 16
+  IMPORT_WORKERS: 6
+  LOG_LEVEL: INFO
+
+# ── Apache (already installed and serving other sites on the web VM) ────
+# true: obtain and renew a Let's Encrypt certificate with certbot (the HTTP-01 challenge needs port 80 reachable).
+# false: you supply the certificate; set both paths below.
+apache_certbot: true
+apache_cert_file: "/etc/letsencrypt/live/{{ livejobs_domain }}/fullchain.pem"
+apache_key_file: "/etc/letsencrypt/live/{{ livejobs_domain }}/privkey.pem"
+
+# ── firewalls (ufw) ─────────────────────────────────────────────────────
+# The database VM: allow SSH, and the database port from the web VM only. Turn off if you manage the firewall elsewhere.
+db_manage_firewall: true
+# The web VM already runs Apache and may have its own rules, so this is off by default. When on: SSH, 80 and 443.
+web_manage_firewall: false

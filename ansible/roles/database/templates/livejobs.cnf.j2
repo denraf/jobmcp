@@ -1,0 +1,11 @@
+# Managed by Ansible. Loaded after mysqld.cnf, so these win.
+[mysqld]
+# The private address only: never 0.0.0.0, never the public one.
+bind-address = {{ db_bind_address }}
+# Accounts are matched on the client's IP address, not on a DNS name.
+skip-name-resolve
+character-set-server = utf8mb4
+collation-server = utf8mb4_0900_ai_ci
+# Job descriptions can carry inline pictures of several megabytes.
+max_allowed_packet = {{ mysql_max_allowed_packet }}
+innodb_buffer_pool_size = {{ mysql_innodb_buffer_pool_size }}

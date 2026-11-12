@@ -1,0 +1,23 @@
+[Unit]
+Description=livejobs: refresh the board inventory from the newest Common Crawl index (new boards wait for an admin to enable them)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=livejobs
+Group=livejobs
+WorkingDirectory=/opt/livejobs
+EnvironmentFile=/etc/livejobs/livejobs.env
+# --refresh: do nothing if the newest crawl is already fully ingested; otherwise ingest it (resuming any pages
+# an earlier attempt missed). Exit 75 means "incomplete, run again later", which the timer does the next day.
+# flock -n -E 0: a run from yesterday that is still going makes this one skip quietly.
+RuntimeDirectory=livejobs
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/flock -n -E 0 /run/livejobs/inventory.lock /opt/livejobs/.venv/bin/livejobs inventory --refresh
+TimeoutStartSec=12h
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

@@ -1,0 +1,59 @@
+---
+# livejobs on two machines: the database server (group db) and the web server (group web: the app, the scheduler and
+# Apache). Run:  ansible-playbook site.yml      (add --check --diff first if you like)
+- name: Check the settings before touching any machine
+  hosts: all
+  gather_facts: false
+  run_once: true
+  tasks:
+    - name: One web server and one database server
+      ansible.builtin.assert:
+        that:
+          - groups['web'] | default([]) | length == 1
+          - groups['db'] | default([]) | length == 1
+          - hostvars[groups['web'][0]].private_ip is defined
+          - hostvars[groups['db'][0]].private_ip is defined
+        fail_msg: >-
+          The inventory needs exactly one host in [web] and one in [db], each with private_ip=
+          (see inventory.example.ini). The app and its scheduler must run on one machine only.
+
+    - name: Settings were changed from the examples
+      ansible.builtin.assert:
+        that:
+          - livejobs_domain != 'jobs.example.com'
+          - livejobs_admin_email != 'admin@example.com'
+          - smtp_user != 'CHANGE_ME'
+        fail_msg: Edit group_vars/all/main.yml (domain, admin email, SMTP).
+
+    - name: Passwords are set, and safe inside a URL and an env file
+      ansible.builtin.assert:
+        that:
+          - vault_db_password is defined and vault_db_password is match('^[A-Za-z0-9]{12,}$')
+          - vault_db_backup_password is defined and vault_db_backup_password is match('^[A-Za-z0-9]{12,}$')
+          - vault_smtp_password is defined and vault_smtp_password is match('^[A-Za-z0-9]{12,}$')
+        fail_msg: >-
+          Set vault_db_password, vault_db_backup_password and vault_smtp_password in group_vars/all/vault.yml:
+          at least 12 letters and digits, nothing else.
+      no_log: true
+
+    - name: The admin password is set
+      ansible.builtin.assert:
+        that:
+          - vault_admin_password is defined and vault_admin_password | length >= 12
+        fail_msg: Set vault_admin_password (12+ characters) in group_vars/all/vault.yml.
+      no_log: true
+
+    - name: Without certbot, the certificate paths are your responsibility
+      ansible.builtin.assert:
+        that: apache_certbot | bool or (apache_cert_file | length > 0 and apache_key_file | length > 0)
+
+- name: Database server
+  hosts: db
+  roles:
+    - database
+
+- name: Web server (app, scheduler, Apache)
+  hosts: web
+  roles:
+    - app
+    - apache

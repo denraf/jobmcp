@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh the livejobs board inventory from Common Crawl, once a month
+
+[Timer]
+# Common Crawl publishes about one crawl a month. Fire daily on the 5th to the 12th: the first run that finds a new
+# crawl ingests it, the later ones do nothing (or finish what a 504-hit run missed). So: real work once a month.
+OnCalendar=*-*-05..12 03:00:00
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

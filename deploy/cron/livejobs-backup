@@ -1,0 +1,6 @@
+# /etc/cron.d/livejobs-backup : nightly database backup at 03:15 (see deploy/bin/livejobs-backup.sh).
+# Use this with the livejobs-scheduler service. (deploy/cron/livejobs is the all-cron alternative to the scheduler.)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+15    3    *   *   *    livejobs  /opt/livejobs/deploy/bin/livejobs-backup.sh >> /var/log/livejobs/backup.log 2>&1

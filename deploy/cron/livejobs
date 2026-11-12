@@ -1,0 +1,14 @@
+# /etc/cron.d/livejobs : fetch the latest job posts every hour.
+# (Use this OR the livejobs-sync.timer systemd unit, not both. Running both is harmless but pointless.)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# min hour dom mon dow  user      command
+0     *    *   *   *    livejobs  /opt/livejobs/deploy/bin/livejobs-cron-sync.sh >> /var/log/livejobs/sync.log 2>&1
+
+# Refresh the board inventory from Common Crawl, once a month. Runs daily on the 5th to the 12th at 03:00; the first
+# run that finds a new crawl ingests it, later ones do nothing (or finish pages an earlier run missed).
+0     3    5-12 * *  livejobs  /opt/livejobs/deploy/bin/livejobs-cron-inventory.sh >> /var/log/livejobs/inventory.log 2>&1
+
+# Nightly database backup at 03:15 (see deploy/bin/livejobs-backup.sh)
+15    3    *   *   *    livejobs  /opt/livejobs/deploy/bin/livejobs-backup.sh >> /var/log/livejobs/backup.log 2>&1
