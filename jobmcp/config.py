@@ -34,6 +34,9 @@ CANARY_BOARDS = os.environ.get("JOBMCP_CANARY_BOARDS", "")
 # on purpose: each board in flight holds all its postings in memory, and the
 # biggest boards are tens of megabytes.
 IMPORT_WORKERS = int(os.environ.get("JOBMCP_IMPORT_WORKERS", "6"))
+# Run a long board import inside the web process instead of in a child process
+# (tests need that: a fake platform cannot cross a process boundary).
+IMPORT_IN_PROCESS = os.environ.get("JOBMCP_IMPORT_IN_PROCESS", "0") == "1"
 # Boards fetched in parallel by one sync run (a thread pool; the work is
 # network-bound).
 SYNC_WORKERS = int(os.environ.get("JOBMCP_SYNC_WORKERS", "16"))
@@ -71,6 +74,14 @@ PUBLIC_BASE_URL = os.environ.get(
 PUBLIC_MCP_URL = os.environ.get(
     "JOBMCP_PUBLIC_MCP_URL", PUBLIC_BASE_URL + "/mcp/"
 )
+# Host names the MCP endpoint answers to, besides localhost and the host of
+# the two URLs above (comma separated, e.g. "www.jobmcp.ai"). Anything else
+# gets a 421, the MCP library's DNS-rebinding protection.
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get("JOBMCP_ALLOWED_HOSTS", "").split(",")
+    if h.strip()
+]
 
 # ── email ──
 # With verification on (default), signups must click an emailed link before

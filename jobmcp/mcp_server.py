@@ -24,8 +24,9 @@ from functools import wraps
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 
-from . import db, metrics
+from . import config, db, metrics
 from .models import strip_data_uris
 from .orm import User
 from .services import (
@@ -470,6 +471,30 @@ class BearerAuth:
             _user_id.reset(tok)
 
 
+def transport_security() -> TransportSecuritySettings:
+    """Which Host and Origin headers the endpoint accepts. The library's
+    default allows localhost only, which refuses every request that arrives
+    through the reverse proxy under the real domain (421 Invalid Host
+    header)."""
+    from urllib.parse import urlsplit
+
+    hosts = {"127.0.0.1", "localhost", "[::1]", *config.ALLOWED_HOSTS}
+    for url in (config.PUBLIC_BASE_URL, config.PUBLIC_MCP_URL):
+        if urlsplit(url).netloc:
+            hosts.add(urlsplit(url).netloc)
+    allowed_hosts = sorted(hosts | {f"{h}:*" for h in hosts})
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        # agents send no Origin; a browser page on another site does
+        allowed_origins=[
+            f"{scheme}://{h}"
+            for h in allowed_hosts
+            for scheme in ("http", "https")
+        ],
+    )
+
+
 def build_http(path: str = "/mcp"):
     """-> (asgi_app, inner_starlette). Stateless: every request carries its own
     token, so no server-side
@@ -478,7 +503,9 @@ def build_http(path: str = "/mcp"):
     `inner.router.lifespan_context(inner)` (the session manager lives
     there)."""
     inner = mcp.streamable_http_app(
-        stateless_http=True, streamable_http_path=path
+        stateless_http=True,
+        streamable_http_path=path,
+        transport_security=transport_security(),
     )
     return BearerAuth(inner), inner
 

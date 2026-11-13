@@ -226,6 +226,15 @@ def test_proxy_configs_hide_metrics_from_the_internet():
         r"location = /metrics \{ return 404; \}",
         (DEPLOY / "nginx" / "jobmcp.conf").read_text(),
     )
+    apache = (DEPLOY / "apache" / "jobmcp.conf").read_text()
+    assert 'RedirectMatch 404 "^/metrics(/.*)?$"' in apache
+    assert 'ProxyPass "/metrics" "!"' in apache
+
+
+def test_apache_config_does_not_pass_on_a_client_supplied_address():
+    apache = (DEPLOY / "apache" / "jobmcp.conf").read_text()
+    assert "ProxyAddHeaders Off" in apache
+    assert 'RequestHeader set X-Forwarded-For "%{JOBMCP_CLIENT_IP}e"' in apache
 
 
 def test_inventory_refresh_is_scheduled_monthly_with_daily_retries():

@@ -100,7 +100,7 @@ work in Docker). `scripts/dev.sh` and `scripts/test.sh` use only the `db` servic
 ## Run it on a server
 
 [`docs/INSTALL.md`](docs/INSTALL.md) is a step-by-step guide for a self-hosted VPS (Ubuntu/Debian): MySQL, systemd,
-HTTPS with Caddy or nginx, SMTP, the hourly fetch, backups, Prometheus and troubleshooting. The files it uses are in
+HTTPS with Caddy, nginx or Apache, SMTP, the hourly fetch, backups, Prometheus and troubleshooting. The files it uses are in
 [`deploy/`](deploy/).
 For two machines (web and database separately) and an Apache that is already running, there is an Ansible playbook in
 [`ansible/`](ansible/README.md).

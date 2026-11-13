@@ -406,3 +406,64 @@ def test_every_claimed_job_carries_the_reminder_and_notes_stay_clean(server):
         in tools["record_application_result"].description.lower()
     )
     assert "ask the user" in tools["start_application"].description.lower()
+
+
+def test_the_endpoint_answers_to_the_public_host_only(fresh_db, monkeypatch):
+    """Behind the reverse proxy the Host header is the real domain. The MCP
+    library refuses anything but localhost unless told otherwise (421)."""
+    import requests
+
+    from jobmcp import config, mcp_server
+
+    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "https://jobmcp.ai")
+    monkeypatch.setattr(config, "PUBLIC_MCP_URL", "https://jobmcp.ai/mcp/")
+    monkeypatch.setattr(config, "ALLOWED_HOSTS", ["www.jobmcp.ai"])
+    app = mcp_server.http_app()
+    u1, _ = seed()
+    token = token_for(u1)
+    with socket.socket() as sk:
+        sk.bind(("127.0.0.1", 0))
+        port = sk.getsockname()[1]
+    srv = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    )
+    t = threading.Thread(target=srv.run, daemon=True)
+    t.start()
+    for _ in range(100):
+        if srv.started:
+            break
+        time.sleep(0.05)
+
+    def post(host, origin=None):
+        h = {
+            "Authorization": f"Bearer {token}",
+            "Host": host,
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
+        if origin:
+            h["Origin"] = origin
+        return requests.post(
+            f"http://127.0.0.1:{port}/mcp",
+            headers=h,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "t", "version": "1"},
+                },
+            },
+        ).status_code
+
+    try:
+        assert post("jobmcp.ai") == 200
+        assert post("www.jobmcp.ai") == 200  # JOBMCP_ALLOWED_HOSTS
+        assert post("jobmcp.ai", "https://jobmcp.ai") == 200
+        assert post("evil.example") == 421
+        assert post("jobmcp.ai", "https://evil.example") == 403
+    finally:
+        srv.should_exit = True
+        t.join(5)

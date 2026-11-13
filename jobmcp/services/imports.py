@@ -10,7 +10,11 @@ a time."""
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -31,6 +35,53 @@ _jobs: dict[str, dict] = {}
 
 def _running() -> dict | None:
     return next((j for j in _jobs.values() if j["state"] == "running"), None)
+
+
+PROTOCOL = "@@import "  # a line from the child process that is for us
+
+
+def execute(lines, enable, verify, admin_id, workers, fetcher, progress):
+    """Check, save and sync every line (see boards.add_many)."""
+    with db.session() as s:
+        boards.add_many(
+            s,
+            lines,
+            enable,
+            verify,
+            added_by=admin_id,
+            fetcher=fetcher,
+            progress=progress,
+            workers=workers,
+        )
+
+
+def child_main() -> None:
+    """`jobmcp import-run`: read the job on stdin, do it, report progress as
+    protocol lines on stdout (everything else on stdout is ordinary logging).
+    Runs at a lower priority than the web service."""
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+    job = json.load(sys.stdin)
+
+    def say(msg: dict) -> None:
+        print(PROTOCOL + json.dumps(msg), flush=True)
+
+    try:
+        execute(
+            job["lines"],
+            job["enable"],
+            job["verify"],
+            job["admin_id"],
+            job["workers"],
+            None,
+            lambda rs: say({"results": rs}),
+        )
+        say({"state": "done"})
+    except Exception as e:
+        log.exception("import failed")
+        say({"state": "failed", "error": f"{type(e).__name__}: {e}"[:300]})
 
 
 def start(
@@ -84,32 +135,8 @@ def start(
                     else:
                         job["problems_truncated"] = True
 
-    def run() -> None:
-        log.info(
-            "import of %d lines started",
-            len(lines),
-            extra={"admin_id": admin_id, "job": job["id"]},
-        )
-        kw = {"workers": workers or config.IMPORT_WORKERS}
-        try:
-            with db.session() as s:
-                boards.add_many(
-                    s,
-                    lines,
-                    enable,
-                    verify,
-                    added_by=admin_id,
-                    fetcher=fetcher,
-                    progress=on_progress,
-                    **kw,
-                )
-            job["state"] = "done"
-        except Exception as e:  # keep what was saved; say what stopped it
-            log.exception("import failed", extra={"job": job["id"]})
-            job["state"], job["error"] = (
-                "failed",
-                f"{type(e).__name__}: {e}"[:300],
-            )
+    def finish(state: str, error: str | None = None) -> None:
+        job["state"], job["error"] = state, error
         job["finished"] = time.time()
         log.info(
             "import finished: %s",
@@ -121,8 +148,77 @@ def start(
             },
         )
 
+    def run() -> None:
+        log.info(
+            "import of %d lines started",
+            len(lines),
+            extra={"admin_id": admin_id, "job": job["id"]},
+        )
+        try:
+            execute(
+                lines,
+                enable,
+                verify,
+                admin_id,
+                workers or config.IMPORT_WORKERS,
+                fetcher,
+                on_progress,
+            )
+            finish("done")
+        except Exception as e:  # keep what was saved; say what stopped it
+            log.exception("import failed", extra={"job": job["id"]})
+            finish("failed", f"{type(e).__name__}: {e}"[:300])
+
+    def run_in_child() -> None:
+        """The same work in its own process: fetching, parsing and storing
+        thousands of postings is CPU work, and in this process it would
+        compete with every page for the interpreter lock."""
+        log.info(
+            "import of %d lines started in its own process",
+            len(lines),
+            extra={"admin_id": admin_id, "job": job["id"]},
+        )
+        job_in = {
+            "lines": lines,
+            "enable": enable,
+            "verify": verify,
+            "admin_id": admin_id,
+            "workers": workers or config.IMPORT_WORKERS,
+        }
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, "-m", "jobmcp", "import-run"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            proc.stdin.write(json.dumps(job_in))
+            proc.stdin.close()
+            result = {"state": "failed", "error": "the import stopped early"}
+            for line in proc.stdout:
+                if not line.startswith(PROTOCOL):
+                    sys.stdout.write(line)  # the child's own log lines
+                    continue
+                msg = json.loads(line[len(PROTOCOL) :])
+                if "results" in msg:
+                    on_progress(msg["results"])
+                else:
+                    result = msg
+            proc.wait()
+            if proc.returncode and result["state"] == "done":
+                result = {
+                    "state": "failed",
+                    "error": f"exit {proc.returncode}",
+                }
+            finish(result["state"], result.get("error"))
+        except Exception as e:
+            log.exception("import failed", extra={"job": job["id"]})
+            finish("failed", f"{type(e).__name__}: {e}"[:300])
+
+    target = run if fetcher or config.IMPORT_IN_PROCESS else run_in_child
     job["thread"] = t = threading.Thread(
-        target=run, name="jobmcp-import", daemon=True
+        target=target, name="jobmcp-import", daemon=True
     )
     t.start()
     return public(job)

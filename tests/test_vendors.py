@@ -456,6 +456,86 @@ def test_paylocity_parse(monkeypatch):
     assert b.location == "Remote"  # no address: remote flag, else the name
 
 
+def test_paylocity_full_description_comes_from_the_posting_page(monkeypatch):
+    from jobmcp import http
+
+    ld = (
+        '<script type="application/ld+json">{"@type":"JobPosting",'
+        '"description":"<p>The whole text</p><ul><li>one</li></ul>"}</script>'
+    )
+    asked = []
+
+    def get(url, **k):
+        asked.append(url)
+        if "/Jobs/Details/" in url:
+            return FakeResp(content=ld.encode())
+        return FakeResp(content=PAYLOCITY_PAGE.encode())
+
+    monkeypatch.setattr(http, "get", get)
+    jobs = VENDORS["paylocity"].fetch(GUID_)
+    assert "The whole text" in jobs[0].description
+    assert "- one" in jobs[0].description
+    assert len([u for u in asked if "/Jobs/Details/" in u]) == 2
+
+    # a second run holds the full text already: no posting page is fetched
+    asked.clear()
+    prev = {j.url: j for j in jobs}
+    again = VENDORS["paylocity"].fetch(GUID_, previous=prev)
+    assert asked and not [u for u in asked if "/Jobs/Details/" in u]
+    assert again[0].description == jobs[0].description
+
+
+def test_paylocity_names_the_company_not_the_guid(monkeypatch):
+    from jobmcp import http
+
+    page = (
+        '<script>window.pageData = {"ModuleTitle":"116508 Innovation At '
+        'Work","Jobs":[{"JobId":1,"JobTitle":"A","Description":"x"}]};'
+        "</script>"
+    )
+    ld = (
+        '<script type="application/ld+json">{"@type":"JobPosting",'
+        '"description":"Full","hiringOrganization":{"name":"Innovation At '
+        'Work Inc"}}</script>'
+    )
+
+    def get(url, **k):
+        body = ld if "/Jobs/Details/" in url else page
+        return FakeResp(content=body.encode())
+
+    monkeypatch.setattr(http, "get", get)
+    v = VENDORS["paylocity"]
+    first = v.fetch(GUID_)
+    assert first[0].company == "Innovation At Work Inc"
+    # no page fetched this time: the stored name is kept, not re-guessed
+    again = v.fetch(GUID_, previous={j.url: j for j in first})
+    assert again[0].company == "Innovation At Work Inc"
+    # nothing stored and no posting page: the page title, minus the number
+    monkeypatch.setattr(
+        http,
+        "get",
+        lambda url, **k: (
+            FakeResp(content=b"", data=None)
+            if "/Jobs/Details/" in url
+            else FakeResp(content=page.encode())
+        ),
+    )
+    assert v.fetch(GUID_)[0].company == "Innovation At Work"
+
+
+def test_paylocity_keeps_the_snippet_when_the_posting_page_fails(monkeypatch):
+    from jobmcp import http
+
+    def get(url, **k):
+        if "/Jobs/Details/" in url:
+            raise OSError("down")
+        return FakeResp(content=PAYLOCITY_PAGE.encode())
+
+    monkeypatch.setattr(http, "get", get)
+    jobs = VENDORS["paylocity"].fetch(GUID_)
+    assert "braces } in text {" in jobs[0].description  # the board still syncs
+
+
 def test_paylocity_page_without_a_job_list_is_a_soft_block(monkeypatch):
     from jobmcp.vendors.base import SoftBlocked
 

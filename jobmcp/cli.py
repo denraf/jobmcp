@@ -121,6 +121,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds between checks for due boards",
     )
 
+    sub.add_parser(
+        "import-run",
+        help="(internal) run one bulk board import from stdin; the web "
+        "service starts this so the import does not slow the pages down",
+    )
     p = sub.add_parser(
         "sync-once",
         help="sync everything due (for cron / a systemd timer), then exit",
@@ -239,6 +244,10 @@ def main(argv=None):
     logging.getLogger("jobmcp.cli").debug("command: %s", a.cmd)
     if a.cmd == "classify":
         return print(classify(a.url) or "no match")
+    if a.cmd == "import-run":
+        from .services import imports
+
+        return imports.child_main()
     if a.cmd == "wait-db":
         return _wait_db(a)
     if a.cmd == "ensure-admin":

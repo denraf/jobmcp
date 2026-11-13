@@ -5,11 +5,11 @@ Prometheus metrics. It is written for **Ubuntu 24.04 or Debian 12**; other Linux
 package names. Commands are meant to be pasted in order.
 
 > **Status of this guide.** The application, the hourly sync, the email flows and the metrics were exercised
-> end to end on a development machine against MySQL 8.4. The systemd units (including the scheduler), Caddy/nginx
+> end to end on a development machine against MySQL 8.4. The systemd units (including the scheduler), Caddy/nginx/Apache
 > configs, cron files and Prometheus files in `deploy/` are standard but were **not** run on a real VPS. Follow the "Verify" steps after each
 > section and expect to adjust paths or distro details.
 
-Using **Ansible**, with the web server and the database on separate machines, and Apache instead of Caddy/nginx? Use
+Using **Ansible**, with the web server and the database on separate machines, and Apache? Use
 [`ansible/`](../ansible/README.md): it does everything in this guide for that layout (steps 2 to 9 and 11).
 
 Prefer containers? `docker-compose.yml` runs the whole stack (database, web, scheduler); see the README. This guide is
@@ -26,7 +26,7 @@ Want to try it first? Skip all of this and run `scripts/dev.sh` on your own comp
                   internet
                      │ 443
               ┌──────▼──────┐
-              │ Caddy/nginx │  TLS, forwards to 127.0.0.1:8000, hides /metrics
+              │ Caddy/nginx/Apache │  TLS, forwards to 127.0.0.1:8000, hides /metrics
               └──────┬──────┘
                      │
           ┌──────────▼───────────┐        ┌───────────────────────────┐
@@ -215,7 +215,27 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d YOUR.DOMAIN
 ```
 
-Both configs return 404 for `/metrics`, so it is never public.
+### Option C: Apache + certbot
+
+Use this when Apache already serves other sites on the machine. The site file only adds a virtual host for your
+domain; nothing else changes.
+
+```bash
+sudo apt -y install apache2 certbot python3-certbot-apache
+sudo a2enmod proxy proxy_http headers rewrite ssl setenvif alias
+sudo cp /opt/jobmcp/deploy/apache/jobmcp.conf /etc/apache2/sites-available/jobmcp.conf
+sudo sed -i 's/jobmcp.ai/YOUR.DOMAIN/' /etc/apache2/sites-available/jobmcp.conf
+sudo a2ensite jobmcp
+sudo apachectl configtest && sudo systemctl reload apache2
+sudo certbot --apache -d YOUR.DOMAIN --redirect
+```
+
+Certbot adds the HTTPS site and the HTTP-to-HTTPS redirect, and renews the certificate on its own timer. The site
+file replaces any `X-Forwarded-For` the client sends, which the login rate limit depends on, so keep
+`JOBMCP_TRUST_PROXY=1` only with this file (or the nginx or Caddy ones). Setting up several VMs with Ansible
+instead? `ansible/` does all of this.
+
+All three configs return 404 for `/metrics`, so it is never public.
 
 **Verify:** open `https://YOUR.DOMAIN`. The home page loads. `curl -I https://YOUR.DOMAIN/metrics` returns 404.
 Agents connect to `https://YOUR.DOMAIN/mcp/`.
@@ -467,9 +487,9 @@ existing accounts as verified, so nobody is locked out.
 - [ ] SSH uses keys only (`PasswordAuthentication no`); consider `fail2ban`.
 - [ ] `curl -I https://YOUR.DOMAIN/metrics` returns 404.
 - [ ] SPF, DKIM and DMARC pass for your sending domain.
-- [ ] With nginx, `X-Forwarded-For` is set to `$remote_addr` (the shipped config does this). `$proxy_add_x_forwarded_for`
+- [ ] With Apache the shipped site file sets `X-Forwarded-For` from the connection (`ProxyAddHeaders Off`); with nginx, `X-Forwarded-For` is set to `$remote_addr` (the shipped config does this). `$proxy_add_x_forwarded_for`
       passes a client-supplied header through and lets attackers dodge the login rate limit. Caddy replaces it.
-- [ ] `JOBMCP_TRUST_PROXY=1` only because Caddy/nginx is in front. Without a proxy, leave it `0`, or clients could
+- [ ] `JOBMCP_TRUST_PROXY=1` only because Caddy/nginx/Apache is in front. Without a proxy, leave it `0`, or clients could
       spoof their IP past the login rate limit.
 - [ ] Backups run and are copied off the machine.
 - [ ] `unattended-upgrades` is enabled for security patches.
@@ -509,7 +529,8 @@ All variables are optional except the database URL, the public base URL and (wit
 | `JOBMCP_DATABASE_URL` | local MySQL | SQLAlchemy URL. `mysql+pymysql://user:pw@host/db?charset=utf8mb4` |
 | `JOBMCP_PUBLIC_BASE_URL` | `http://localhost:8000` | Public address; used in emailed links and agent setup commands |
 | `JOBMCP_PUBLIC_MCP_URL` | `<base>/mcp/` | Override the MCP URL shown in the portal |
-| `JOBMCP_TRUST_PROXY` | `0` | `1` when behind Caddy/nginx: use `X-Forwarded-For` for the client IP |
+| `JOBMCP_ALLOWED_HOSTS` | (empty) | Extra host names the MCP endpoint answers to, comma separated (e.g. `www.jobmcp.ai`). The hosts of `JOBMCP_PUBLIC_BASE_URL` and `JOBMCP_PUBLIC_MCP_URL` and localhost are always allowed; any other `Host` gets `421 Invalid Host header` |
+| `JOBMCP_TRUST_PROXY` | `0` | `1` when behind Caddy/nginx/Apache: use `X-Forwarded-For` for the client IP |
 | `JOBMCP_ALLOW_REGISTRATION` | `1` | `0` closes self-signup |
 | `JOBMCP_REQUIRE_EMAIL_VERIFICATION` | `1` | `0` confirms signups immediately (no mail needed) |
 | `JOBMCP_VERIFY_TTL_HOURS` | `24` | Lifetime of the confirmation link |
@@ -531,6 +552,7 @@ All variables are optional except the database URL, the public base URL and (wit
 | `JOBMCP_CC_RETRIES` | `8` | Retries per Common Crawl request, with a shared, growing pause |
 | `JOBMCP_CC_GIVE_UP_AFTER` | `12` | Consecutive Common Crawl failures after which a crawl stops (and resumes next run) |
 | `JOBMCP_IMPORT_WORKERS` | `6` | Boards a long import checks and stores at once (lower than the sync workers because of memory) |
+| `JOBMCP_IMPORT_IN_PROCESS` | `0` | `1` runs a long bulk import inside the web process. Leave it `0`: the import then runs as its own low-priority process (`jobmcp import-run`) and cannot slow the pages down |
 | `JOBMCP_CANARY_BOARDS` | empty | Extra boards for the daily platform check: `vendor:board,vendor:board` |
 | `JOBMCP_SYNC_WORKERS` | `16` | Boards fetched in parallel by one sync run (thread pool) |
 | `JOBMCP_SYNC_AFTER_REFRESH` | `1` | Start syncing new boards as soon as a Common Crawl refresh ends |

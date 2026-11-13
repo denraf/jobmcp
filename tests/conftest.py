@@ -23,6 +23,14 @@ def _no_background_sync(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _imports_in_process(monkeypatch):
+    """Tests fake the platforms with functions, which cannot cross into the
+    child process a real import runs in (tests/test_import_process.py
+    covers that one)."""
+    monkeypatch.setattr(config, "IMPORT_IN_PROCESS", True)
+
+
+@pytest.fixture(autouse=True)
 def _no_response_cache(monkeypatch):
     """Tests sync and then query again within seconds, so the public list's
     cache is off (tests/test_cache.py turns it on)."""

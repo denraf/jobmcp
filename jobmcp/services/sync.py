@@ -199,7 +199,8 @@ def sync_board(board_id: int, fetcher: Fetcher | None = None) -> dict:
                 new,
                 closed,
             )
-            if not b.company_name and jobs:
+            # (a vendor that could not name the company used the slug)
+            if jobs and (not b.company_name or b.company_name == b.board):
                 b.company_name = jobs[0].company[:255]
             if b.agency_override is None:  # an admin's decision wins
                 b.is_agency = classify.is_agency(b.company_name, b.board)
