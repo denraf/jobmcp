@@ -379,10 +379,12 @@ async function adminBoards() {
   function paintCrawl(st) {
     drawHistory(st.runs);
     const run = st.running;
-    crawlBtn.disabled = !!run;
-    crawlBtn.textContent = run ? 'Refresh running…' : 'Refresh from Common Crawl';
+    crawlBtn.disabled = !!run || !!st.queued;
+    crawlBtn.textContent = run ? 'Refresh running…' : st.queued ? 'Refresh queued…' : 'Refresh from Common Crawl';
     crawlBar.hidden = !run;
-    if (run) {
+    if (!run && st.queued) {
+      crawlStatus.textContent = 'Queued. Waiting for the worker service to pick it up. If this stays here, check that the worker is running.';
+    } else if (run) {
       crawlBar.max = Math.max(run.pages_total, 1); crawlBar.value = run.pages_fetched;
       if (run.pages_total === 0 && run.pages_fetched === 0) {
         crawlStatus.textContent = `Contacting Common Crawl for ${run.crawl}. It can take a minute or two to answer. You can leave this page; the refresh keeps going.`;
@@ -400,14 +402,14 @@ async function adminBoards() {
     try {
       const st = await api('/admin/inventory');
       paintCrawl(st);
-      if (wasRunning && !st.running) {  // it just finished: say how it went, and refresh the figures
+      if (wasRunning && !st.running && !st.queued) {  // it just finished: say how it went, and refresh the figures
         const last = st.runs[0];
         toast(last && last.status === 'complete' ? `Refresh finished: ${last.boards_new.toLocaleString()} new ${last.boards_new === 1 ? 'board' : 'boards'} found`
           : `Refresh ended: ${(RUN[last?.status] || [last?.status])[0].toLowerCase()}. See the history below.`, last && last.status !== 'complete');
         loadList(true);
       }
-      wasRunning = !!st.running;
-      if (st.running) { refreshCounters(); pollTimer = setTimeout(pollCrawl, 3000); }
+      wasRunning = !!(st.running || st.queued);
+      if (st.running || st.queued) { refreshCounters(); pollTimer = setTimeout(pollCrawl, 3000); }
     } catch { pollTimer = setTimeout(pollCrawl, 6000); }
   }
   crawlBtn.addEventListener('click', async () => {
@@ -563,6 +565,11 @@ async function adminBoards() {
     importBar.hidden = j.state !== 'running';
     importBar.value = j.total ? j.done / j.total : 0;
     const counts = summaryText(j.summary);
+    if (j.state === 'running' && j.waiting_for_worker) {
+      importLine.textContent = 'Queued. Waiting for the worker service to pick it up. This keeps going if you leave the page.';
+      manyOut.replaceChildren(importBar, importLine);
+      return;
+    }
     if (j.state === 'running') {
       importLine.textContent = `Checking and adding: ${j.done.toLocaleString()} of ${j.total.toLocaleString()}${counts ? ' (' + counts + ')' : ''}. This keeps going if you leave the page.`;
       manyOut.replaceChildren(importBar, importLine);
@@ -646,8 +653,18 @@ async function adminBoards() {
     const syncBtn = h('button', { class: 'btn btn-quiet btn-sm', type: 'button', text: 'Sync now' });
     syncBtn.addEventListener('click', async () => {
       syncBtn.disabled = true;
-      try { const r = await api(`/admin/boards/${b.id}/sync`, { method: 'POST' }); toast(r.ok ? `Synced: ${r.jobs} jobs (${r.new} new)` : `Failed: ${r.error}`, !r.ok); loadList(true); }
-      catch (ex) { toast(ex.message, true); syncBtn.disabled = false; }
+      try {
+        // the worker service does the syncing; ask for it, then wait for the answer
+        let t = await api(`/admin/boards/${b.id}/sync`, { method: 'POST' });
+        for (let i = 0; i < 300 && (t.state === 'queued' || t.state === 'running'); i++) {
+          await new Promise((res) => setTimeout(res, 1000));
+          t = await api(`/admin/tasks/${t.id}`);
+        }
+        if (t.state === 'failed') throw new Error(t.error || 'The sync failed.');
+        if (t.state !== 'done') throw new Error('Still waiting for the worker service. Check that it is running.');
+        const r = t.result;
+        toast(r.ok ? `Synced: ${r.jobs} jobs (${r.new} new)` : `Failed: ${r.error}`, !r.ok); loadList(true);
+      } catch (ex) { toast(ex.message, true); syncBtn.disabled = false; }
     });
     return h('tr', {},
       h('td', {}, link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', text: b.board }) : b.board,
@@ -693,7 +710,9 @@ async function adminBoards() {
     syncAllBar.max = Math.max(st.total, 1); syncAllBar.value = st.done;
     const n = (x) => x.toLocaleString();
     const tail = `${n(st.ok)} ok, ${n(st.failed)} failed, ${n(st.jobs)} jobs (${n(st.new)} new)`;
-    syncAllLine.textContent = running
+    syncAllLine.textContent = running && st.waiting_for_worker
+      ? 'Queued. Waiting for the worker service to pick it up.'
+      : running
       ? `Syncing ${n(st.done)} of ${n(st.total)} boards: ${tail}. This keeps going if you leave the page.`
       : st.state === 'failed' ? `Stopped after ${n(st.done)} of ${n(st.total)} boards: ${st.error}`
         : `Synced ${n(st.done)} boards ${ago(st.finished_at)}: ${tail}.`;

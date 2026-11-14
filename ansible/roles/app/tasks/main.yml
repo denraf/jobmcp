@@ -108,7 +108,7 @@
     owner: root
     group: root
     mode: "0644"
-  loop: [jobmcp-web, jobmcp-scheduler]
+  loop: [jobmcp-web, jobmcp-scheduler, jobmcp-tasks]
   notify:
     - Reload systemd
     - Restart jobmcp
@@ -140,12 +140,12 @@
 - name: Apply unit changes before starting
   ansible.builtin.meta: flush_handlers
 
-- name: Web app and scheduler are running
+- name: Web app, scheduler and task worker are running
   ansible.builtin.service:
     name: "{{ item }}"
     state: started
     enabled: true
-  loop: [jobmcp-web, jobmcp-scheduler]
+  loop: [jobmcp-web, jobmcp-scheduler, jobmcp-tasks]
 
 - name: The app answers on its local port
   ansible.builtin.uri:

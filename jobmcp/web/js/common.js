@@ -88,7 +88,15 @@ export function toast(msg, bad = false) {
 export const VENDOR_LABEL = {
   greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workable: 'Workable', smartrecruiters: 'SmartRecruiters',
   recruitee: 'Recruitee', bamboohr: 'BambooHR', personio: 'Personio', teamtailor: 'Teamtailor', breezy: 'Breezy HR',
-  workday: 'Workday', icims: 'iCIMS', paylocity: 'Paylocity', gem: 'Gem',
+  workday: 'Workday', icims: 'iCIMS', paylocity: 'Paylocity', gem: 'Gem', jobvite: 'Jobvite', pinpoint: 'Pinpoint',
+  rippling: 'Rippling', applytojob: 'ApplyToJob (JazzHR)', agilehr: 'AgileHR', careerplug: 'CareerPlug',
+  comeet: 'Comeet', freshteam: 'Freshteam', hibob: 'HiBob', homerun: 'Homerun', join: 'JOIN',
+  recruiterflow: 'Recruiterflow', softgarden: 'Softgarden', careerpuck: 'CareerPuck', crelate: 'Crelate',
+  fountain: 'Fountain', getro: 'Getro', manatal: 'Manatal', zoho: 'Zoho Recruit', applicantpro: 'ApplicantPro',
+  isolved: 'iSolved Hire', prismhr: 'PrismHR Hire', trakstar: 'Trakstar Hire', oracle: 'Oracle Recruiting Cloud',
+  eightfold: 'Eightfold', loxo: 'Loxo', simplicant: 'Simplicant', pageup: 'PageUp', peopleadmin: 'PeopleAdmin',
+  ultipro: 'UltiPro', ukg: 'UKG Pro Recruiting', ycombinator: 'Y Combinator', occupop: 'Occupop',
+  talentlyft: 'TalentLyft', dover: 'Dover', jibeapply: 'Jibe', recruitcrm: 'Recruit CRM',
 };
 
 export function ago(iso) {

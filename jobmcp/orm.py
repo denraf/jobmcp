@@ -374,3 +374,41 @@ class CanaryResult(Base):
     jobs: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Task(Base):
+    """Work the web service asks the worker service to do (imports, syncs,
+    the platform check, the Common Crawl refresh). The web service only
+    inserts a row and reads progress back; the worker claims rows, does the
+    work and records progress. See services/tasks.py."""
+
+    __tablename__ = "tasks"
+    id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    # queued -> running -> done | failed
+    state: Mapped[str] = mapped_column(String(12), default="queued")
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    progress: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    requested_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Set to the kind while a one-at-a-time task is queued or running, NULL
+    # once it ends. The unique index is what makes "already running" safe when
+    # two web workers get the same click.
+    active_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    worker: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    __table_args__ = (
+        UniqueConstraint("active_key", name="uq_tasks_active_key"),
+        Index("ix_tasks_state_id", "state", "id"),
+        Index("ix_tasks_kind_id", "kind", "id"),
+    )

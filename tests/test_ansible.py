@@ -138,3 +138,15 @@ def test_no_real_secret_is_committed():
     assert "vault_" not in main  # secrets live only in the vault file
     assert not (ANSIBLE / "group_vars/all/vault.yml").exists()
     assert not (ANSIBLE / "inventory.ini").exists()
+
+
+def test_the_task_worker_is_installed_and_started_next_to_the_scheduler():
+    """The web service only queues imports and syncs; without this unit the
+    admin portal's buttons would wait forever."""
+    app = ANSIBLE / "roles/app"
+    unit = (app / "templates/jobmcp-tasks.service.j2").read_text()
+    assert "jobmcp tasks" in unit and "{{ jobmcp_app_dir }}" in unit
+    for f in ("tasks/main.yml", "handlers/main.yml"):
+        text = (app / f).read_text()
+        assert "jobmcp-tasks" in text, f
+        assert text.count("jobmcp-scheduler") == text.count("jobmcp-tasks"), f

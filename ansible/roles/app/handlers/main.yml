@@ -7,4 +7,4 @@
   ansible.builtin.service:
     name: "{{ item }}"
     state: restarted
-  loop: [jobmcp-web, jobmcp-scheduler]
+  loop: [jobmcp-web, jobmcp-scheduler, jobmcp-tasks]

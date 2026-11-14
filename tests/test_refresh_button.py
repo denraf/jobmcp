@@ -27,7 +27,7 @@ def c():
 
 
 @pytest.fixture()
-def admin(c):
+def admin(c, worker):
     mk_user("admin@x.io", "admin")
     return {
         "Authorization": "Bearer "
@@ -337,19 +337,24 @@ def test_the_lock_is_released_even_when_a_run_crashes(monkeypatch):
     again.release()
 
 
-def test_two_simultaneous_starts_only_one_wins(crawl):
+def test_two_simultaneous_requests_only_one_wins(worker, crawl):
     gate = threading.Event()
     crawl.install(FakeCrawl(gate=gate))
-    first = inventory.start_background(log=lambda m: None)
-    second = inventory.start_background(log=lambda m: None)
+    first = inventory.request_refresh(log=lambda m: None)
+    second = inventory.request_refresh(log=lambda m: None)
     assert (first["status"], second["status"]) == (
         "started",
         "already_running",
     )
     gate.set()
-    first["thread"].join(20)
-    with db.session() as s:
-        assert len(list(s.scalars(select(InventoryRun)))) == 1
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        with db.session() as s:
+            runs = list(s.scalars(select(InventoryRun)))
+        if runs and runs[0].status == "complete":
+            break
+        time.sleep(0.1)
+    assert len(runs) == 1 and runs[0].status == "complete"
 
 
 def test_a_run_left_running_by_a_dead_process_is_not_reported_as_running(

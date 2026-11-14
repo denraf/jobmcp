@@ -26,7 +26,7 @@ from ..models import fit
 from ..orm import Board, Job, SyncRun, utcnow
 from ..vendors import VENDORS
 from ..vendors.base import BoardGone
-from . import ServiceError
+from . import ServiceError, tasks
 
 log = logging.getLogger("jobmcp.sync")
 LEASE_MIN = 10
@@ -430,96 +430,115 @@ def run_due(
             return results
 
 
-_all_lock = threading.Lock()
-_all: dict | None = None
-
-
 def sync_all_state() -> dict | None:
-    with _all_lock:
-        return dict(_all) if _all else None
+    """The latest "sync every enabled board" run, as the admin page shows it
+    (None if there never was one)."""
+    t = tasks.latest("sync_all")
+    if not t:
+        return None
+    p = t["progress"]
+    return {
+        "state": {"queued": "running", "running": "running"}.get(
+            t["state"], t["state"]
+        ),
+        "total": p.get("total", 0),
+        "done": p.get("done", 0),
+        "ok": p.get("ok", 0),
+        "failed": p.get("failed", 0),
+        "jobs": p.get("jobs", 0),
+        "new": p.get("new", 0),
+        "started_at": t["started_at"] or t["created_at"],
+        "finished_at": t["finished_at"],
+        "error": t["error"],
+        "waiting_for_worker": t["state"] == "queued",
+    }
 
 
-def start_all(
-    workers: int = config.SYNC_WORKERS, fetcher: Fetcher | None = None
-) -> dict:
-    """Refresh every enabled board now, whatever its schedule, on a background
-    thread. Returns at once; poll
-    `sync_all_state()`. Boards are taken in small batches through the same
-    lease as the scheduler, so it is safe next
-    to the scheduler (a board someone else is syncing is skipped) and progress
-    is steady. One run at a time."""
-    global _all
-    with _all_lock:
-        if _all and _all["state"] == "running":
-            raise ServiceError(
-                "A sync of all boards is already running. Its progress is "
-                "shown above.",
-                409,
+def request_all(by: int | None = None) -> dict:
+    """Refresh every enabled board now, whatever its schedule. The web service
+    only queues it; the worker does it. One at a time."""
+    with db.session() as s:
+        total = (
+            s.scalar(
+                select(func.count())
+                .select_from(Board)
+                .where(Board.status == "enabled")
             )
-        with db.session() as s:
-            total = (
-                s.scalar(
-                    select(func.count())
-                    .select_from(Board)
-                    .where(Board.status == "enabled")
-                )
-                or 0
-            )
-        state = {
-            "state": "running",
-            "total": total,
-            "done": 0,
-            "ok": 0,
-            "failed": 0,
-            "jobs": 0,
-            "new": 0,
-            "started_at": utcnow(),
-            "finished_at": None,
-            "error": None,
-        }
-        _all = state
-
-    def run() -> None:
-        done: set[int] = set()
-        started = time.monotonic()
-        log.info("sync of all %d enabled boards started", total)
-        try:
-            while True:
-                ids = claim_due(
-                    max(workers * 4, 16), exclude=frozenset(done), force=True
-                )
-                if not ids:
-                    break
-                done.update(ids)
-                res = sync_many(ids, workers, fetcher)
-                with _all_lock:
-                    state["done"] = len(done)
-                    state["ok"] += sum(r["ok"] for r in res)
-                    state["failed"] += sum(not r["ok"] for r in res)
-                    state["jobs"] += sum(r["jobs"] or 0 for r in res)
-                    state["new"] += sum(r["new"] or 0 for r in res)
-        except Exception as e:
-            log.exception("sync of all boards failed")
-            state["error"] = f"{type(e).__name__}: {e}"[:300]
-        with _all_lock:
-            state["total"] = max(
-                state["total"], state["done"]
-            )  # boards added meanwhile
-            state["state"], state["finished_at"] = (
-                ("failed" if state["error"] else "done"),
-                utcnow(),
-            )
-        log.info(
-            "sync of all boards finished: %d boards, %d ok, %d failed in "
-            "%.0fs",
-            state["done"],
-            state["ok"],
-            state["failed"],
-            time.monotonic() - started,
+            or 0
         )
-
-    threading.Thread(target=run, name="jobmcp-sync-all", daemon=True).start()
+    tasks.enqueue("sync_all", by=by, progress={"total": total})
     return sync_all_state()
+
+
+def run_all_task(
+    payload: dict,
+    ctx: tasks.Context,
+    workers: int = config.SYNC_WORKERS,
+    fetcher: Fetcher | None = None,
+) -> dict:
+    """The worker's side of `request_all`. Boards are taken in small batches
+    through the same lease as the scheduler, so it is safe next to it (a board
+    someone else is syncing is skipped) and progress is steady."""
+    done: set[int] = set()
+    state = {"ok": 0, "failed": 0, "jobs": 0, "new": 0}
+    started = time.monotonic()
+    log.info("sync of all %d enabled boards started", ctx.state.get("total"))
+    while True:
+        ids = claim_due(
+            max(workers * 4, 16), exclude=frozenset(done), force=True
+        )
+        if not ids:
+            break
+        done.update(ids)
+        res = sync_many(ids, workers, fetcher)
+        state["ok"] += sum(r["ok"] for r in res)
+        state["failed"] += sum(not r["ok"] for r in res)
+        state["jobs"] += sum(r["jobs"] or 0 for r in res)
+        state["new"] += sum(r["new"] or 0 for r in res)
+        ctx.progress(
+            done=len(done),
+            # boards added meanwhile
+            total=max(ctx.state.get("total", 0), len(done)),
+            **state,
+        )
+    ctx.progress(
+        done=len(done), total=max(ctx.state.get("total", 0), len(done))
+    )
+    log.info(
+        "sync of all boards finished: %d boards, %d ok, %d failed in %.0fs",
+        len(done),
+        state["ok"],
+        state["failed"],
+        time.monotonic() - started,
+    )
+    return state
+
+
+def request_board(board_id: int, by: int | None = None) -> dict:
+    """Sync one board now, in the worker. -> the queued task."""
+    with db.session() as s:
+        if not s.get(Board, board_id):
+            raise ServiceError("board not found", 404)
+    return tasks.enqueue("sync_board", {"board_id": board_id}, by=by)
+
+
+def run_board_task(payload: dict, ctx: tasks.Context) -> dict:
+    return sync_board(payload["board_id"])
+
+
+def request_boards(ids: list[int], by: int | None = None) -> dict | None:
+    """Sync these boards soon, in the worker (what adding a board does)."""
+    ids = list(ids)
+    return tasks.enqueue("sync_boards", {"ids": ids}, by=by) if ids else None
+
+
+def run_boards_task(payload: dict, ctx: tasks.Context) -> dict:
+    res = sync_many(payload["ids"])
+    return {
+        "boards": len(res),
+        "ok": sum(r["ok"] for r in res),
+        "failed": sum(not r["ok"] for r in res),
+    }
 
 
 def run_forever(

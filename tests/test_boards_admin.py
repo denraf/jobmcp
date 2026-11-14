@@ -244,9 +244,11 @@ def test_an_mcp_token_cannot_add_boards(c, fake_platform):
 
 
 # ── API: adding ─────────────────────────────────────────────────────────
-def test_add_by_slug_checks_the_platform_and_stores_jobs_immediately(
+def test_add_by_slug_checks_the_platform_and_the_worker_stores_the_jobs(
     c, admin, fake_platform
 ):
+    from jobmcp.services import tasks
+
     r = c.post(
         "/admin/boards",
         headers=admin,
@@ -254,25 +256,31 @@ def test_add_by_slug_checks_the_platform_and_stores_jobs_immediately(
     )
     assert r.status_code == 201
     b = r.json()
-    assert (b["board"], b["source"], b["status"], b["job_count"]) == (
+    assert (b["board"], b["source"], b["status"]) == (
         "stripe",
         "manual",
         "enabled",
-        3,
     )
     assert (
         b["added_by"] is not None
         and b["public_url"] == "https://boards.greenhouse.io/stripe"
-        and b["company_name"] == "Stripe"
     )
-    assert fake_platform["calls"] == [
-        ("greenhouse", "stripe")
-    ]  # exactly one fetch: the check *is* the first sync
-    assert c.get("/public/stats").json()["open_jobs"] == 3
+    # the request checked that the board exists and stored nothing; the
+    # syncing is queued for the worker
+    assert b["job_count"] == 0
     with db.session() as s:
-        assert (
-            s.get(Board, b["id"]).next_sync_at is not None
-        )  # scheduled from now on
+        assert s.scalar(select(func.count()).select_from(Job)) == 0
+    queued = tasks.latest("sync_boards")
+    assert queued["state"] == "queued"
+    assert tasks.run_pending() == 1  # what the worker service does
+    assert fake_platform["calls"] == [
+        ("greenhouse", "stripe"),  # the check, in the request
+        ("greenhouse", "stripe"),  # the sync, in the worker
+    ]
+    with db.session() as s:
+        assert s.scalar(select(func.count()).select_from(Job)) == 3
+        row = s.get(Board, b["id"])
+        assert row.company_name == "Stripe" and row.next_sync_at is not None
 
 
 def test_a_typo_is_refused_and_nothing_is_stored(c, admin, fake_platform):
@@ -784,8 +792,8 @@ def _wait_import(c, admin, job_id):
     raise AssertionError("import did not finish")
 
 
-def test_a_long_import_runs_in_the_background_with_progress(
-    c, admin, monkeypatch
+def test_a_long_import_runs_in_the_worker_with_progress(
+    c, admin, monkeypatch, worker
 ):
     monkeypatch.setattr(
         sync,
@@ -824,7 +832,7 @@ def test_short_imports_still_answer_inline(c, admin, fake_platform):
     assert r.status_code == 200 and r.json()["summary"] == {"added": 1}
 
 
-def test_only_one_background_import_at_a_time(c, admin, monkeypatch):
+def test_only_one_background_import_at_a_time(c, admin, monkeypatch, worker):
     import threading
 
     gate = threading.Event()
@@ -934,8 +942,8 @@ def test_boards_list_sorts_by_name_status_jobs_and_last_synced(c, admin):
     assert "last_sync_at" in c.get("/admin/boards", headers=admin).json()[0]
 
 
-def test_sync_all_refreshes_every_enabled_board_in_the_background(
-    c, admin, monkeypatch
+def test_sync_all_refreshes_every_enabled_board_in_the_worker(
+    c, admin, monkeypatch, worker
 ):
     import time
 
@@ -973,7 +981,9 @@ def test_sync_all_refreshes_every_enabled_board_in_the_background(
     )  # can run again once finished
 
 
-def test_sync_all_is_admin_only_and_one_at_a_time(c, admin, monkeypatch):
+def test_sync_all_is_admin_only_and_one_at_a_time(
+    c, admin, monkeypatch, worker
+):
     import threading
 
     mk_user("u@x.io", "user")

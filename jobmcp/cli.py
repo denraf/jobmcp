@@ -121,10 +121,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds between checks for due boards",
     )
 
-    sub.add_parser(
-        "import-run",
-        help="(internal) run one bulk board import from stdin; the web "
-        "service starts this so the import does not slow the pages down",
+    p = sub.add_parser(
+        "tasks",
+        help="the worker service: do what the admin portal queues (board "
+        "imports, syncs, the platform check, the Common Crawl refresh)",
+    )
+    p.add_argument(
+        "--slots",
+        type=int,
+        default=config.TASK_SLOTS,
+        help="tasks run at the same time",
+    )
+    p.add_argument(
+        "--poll", type=float, default=2.0, help="seconds between checks"
+    )
+    p.add_argument(
+        "--once",
+        action="store_true",
+        help="run what is queued now, then exit",
     )
     p = sub.add_parser(
         "sync-once",
@@ -244,10 +258,16 @@ def main(argv=None):
     logging.getLogger("jobmcp.cli").debug("command: %s", a.cmd)
     if a.cmd == "classify":
         return print(classify(a.url) or "no match")
-    if a.cmd == "import-run":
-        from .services import imports
+    if a.cmd == "tasks":
+        from .services import tasks
 
-        return imports.child_main()
+        if a.once:
+            print(f"{tasks.run_pending()} task(s) run")
+            return
+        stop = threading.Event()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, lambda *_: stop.set())
+        return tasks.run_forever(stop, a.slots, a.poll)
     if a.cmd == "wait-db":
         return _wait_db(a)
     if a.cmd == "ensure-admin":

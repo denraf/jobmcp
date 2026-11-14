@@ -14,14 +14,12 @@ fallback. Add your own with JOBMCP_CANARY_BOARDS="vendor:board,...".
 from __future__ import annotations
 
 import logging
-import threading
 import time
 
 from sqlalchemy import select
 
 from . import config, db
 from .orm import Board, CanaryResult, utcnow
-from .services import ServiceError
 from .vendors import VENDORS
 
 log = logging.getLogger("jobmcp.canary")
@@ -156,31 +154,25 @@ def run(vendors: list[str] | None = None, fetcher=None) -> list[dict]:
     return results
 
 
-_lock = threading.Lock()
-_running: dict | None = None
+def request(by: int | None = None) -> dict:
+    """Ask the worker to run every check; one at a time. The results land in
+    the database, where the health page reads them."""
+    from .services import tasks
+
+    t = tasks.enqueue("canary", by=by)
+    return {"state": "running", "started_at": t["created_at"]}
 
 
-def start_background(fetcher=None) -> dict:
-    """Run every check on a thread; one at a time. -> {"state": ...}"""
-    global _running
-    with _lock:
-        if _running and _running["state"] == "running":
-            raise ServiceError("A platform check is already running.", 409)
-        _running = state = {"state": "running", "started_at": utcnow()}
+def run_task(payload: dict, ctx) -> dict:
+    """The worker's side of `request`."""
+    results = run()
+    from . import health
 
-    def go() -> None:
-        try:
-            state["results"] = run(fetcher=fetcher)
-            state["state"] = "done"
-        except Exception as e:
-            log.exception("canary run failed")
-            state["state"], state["error"] = "failed", str(e)[:300]
-        from . import health
-
-        try:
-            health.snapshot_vendors()
-        except Exception:
-            log.exception("snapshot after canary failed")
-
-    threading.Thread(target=go, name="jobmcp-canary", daemon=True).start()
-    return {"state": "running", "started_at": state["started_at"]}
+    try:
+        health.snapshot_vendors()
+    except Exception:
+        log.exception("snapshot after canary failed")
+    return {
+        "checked": len(results),
+        "failing": sum(not r["ok"] for r in results),
+    }

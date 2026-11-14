@@ -217,6 +217,7 @@ def add_many(
     background: bool = False,
     chunk: int | None = None,
     progress=None,
+    defer_sync=None,
 ) -> list[dict]:
     """Bulk add. Each entry is 'vendor:slug', 'vendor slug', or a careers URL.
     Returns one result per entry, in input
@@ -229,7 +230,10 @@ def add_many(
     so memory stays flat however long the
     list is (holding every board's jobs at once is what runs a small container
     out of memory).
-    `progress(chunk_results)` is called after each chunk."""
+    `progress(chunk_results)` is called after each chunk. With `defer_sync`
+    (a callable taking a list of board ids) the new boards are not synced here
+    but handed to it: the web service uses that to leave the syncing to the
+    worker."""
     from concurrent.futures import ThreadPoolExecutor
 
     chunk = chunk or max(1, workers)
@@ -320,7 +324,9 @@ def add_many(
             done.append(results[i])
         # the sync threads use their own sessions and must see the boards
         s.commit()
-        if sync and to_sync:
+        if defer_sync and to_sync:
+            defer_sync(list(to_sync))
+        elif sync and to_sync:
             sync_svc.sync_many(to_sync, workers, fetcher, background)
         del (
             checks,

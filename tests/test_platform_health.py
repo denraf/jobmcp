@@ -180,7 +180,7 @@ def test_canary_env_boards_and_nothing_to_check(monkeypatch):
     assert canary.check("bamboohr", lambda v, b: []) is None  # no sample known
 
 
-def test_canary_endpoint_runs_in_the_background(c, admin, monkeypatch):
+def test_canary_endpoint_runs_in_the_worker(c, admin, monkeypatch, worker):
     import time
 
     monkeypatch.setattr(canary, "SAMPLES", {"lever": ["sample"]})

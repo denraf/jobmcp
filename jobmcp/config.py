@@ -34,9 +34,12 @@ CANARY_BOARDS = os.environ.get("JOBMCP_CANARY_BOARDS", "")
 # on purpose: each board in flight holds all its postings in memory, and the
 # biggest boards are tens of megabytes.
 IMPORT_WORKERS = int(os.environ.get("JOBMCP_IMPORT_WORKERS", "6"))
-# Run a long board import inside the web process instead of in a child process
-# (tests need that: a fake platform cannot cross a process boundary).
-IMPORT_IN_PROCESS = os.environ.get("JOBMCP_IMPORT_IN_PROCESS", "0") == "1"
+# The worker service (`jobmcp tasks`) does what the admin portal asks for:
+# imports, syncs, the platform check, the Common Crawl refresh. It runs this
+# many tasks at once, and a task that has not reported for TASK_STALE_MIN
+# minutes is treated as dead (its worker was killed).
+TASK_SLOTS = int(os.environ.get("JOBMCP_TASK_SLOTS", "3"))
+TASK_STALE_MIN = int(os.environ.get("JOBMCP_TASK_STALE_MIN", "5"))
 # Boards fetched in parallel by one sync run (a thread pool; the work is
 # network-bound).
 SYNC_WORKERS = int(os.environ.get("JOBMCP_SYNC_WORKERS", "16"))

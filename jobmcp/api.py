@@ -767,17 +767,14 @@ def admin_probe(
 def admin_add_board(body: NewBoard, admin: Admin, s: Sess):
     """Add a board by platform and slug (or a careers URL). Admin only.
 
-    With verify (the default) the board is checked on its platform first, a
-    typo is refused with a clear
-    message, and the jobs found by that check are stored straight away (no
-    second fetch)."""
+    With verify (the default) the board is checked on its platform first and
+    a typo is refused with a clear message. Its postings are then fetched and
+    stored by the worker service, not by this request."""
     vendor, slug = boards.resolve(body.vendor, body.slug, body.url)
-    jobs = None
     if body.verify:
         found = boards.probe(vendor, slug)
         if not found["exists"]:
             raise HTTPException(422, found["error"] or "board not found")
-        jobs = found["jobs"]
     b = boards.add_board(
         s, vendor, slug, body.enable, body.sync_interval_min, added_by=admin.id
     )
@@ -790,9 +787,10 @@ def admin_add_board(body: NewBoard, admin: Admin, s: Sess):
             "enabled": body.enable,
         },
     )
-    if jobs is not None and body.enable:
+    if body.enable:
         s.commit()
-        sync_svc.sync_board(b.id, fetcher=lambda v, sl: jobs)
+        # the worker stores its postings; this request does not
+        sync_svc.request_boards([b.id], by=admin.id)
         s.refresh(b)
     return board_out(b)
 
@@ -802,16 +800,20 @@ def admin_import_boards(body: ImportBoards, admin: Admin, s: Sess):
     """Add many at once. One entry per line: 'greenhouse:stripe' or a careers
     URL. Bad lines don't stop good ones.
 
-    A short list is done within the request and answered with one result per
-    line. A long one is checked, saved and
-    synced in the background (a few boards at a time, so memory stays flat):
-    this answers 202 with an import id, and
-    GET /admin/boards/import/{id} reports progress."""
+    A short list is checked and saved within the request and answered with one
+    result per line (the worker then syncs the new boards). A long one is
+    handed to the worker service whole: this answers 202 with an import id,
+    and GET /admin/boards/import/{id} reports progress."""
     if len([e for e in body.entries if e.strip()]) > imports.INLINE_MAX:
         job = imports.start(body.entries, body.enable, body.verify, admin.id)
         return JSONResponse(job, status_code=202)
     results = boards.add_many(
-        s, body.entries, body.enable, body.verify, added_by=admin.id
+        s,
+        body.entries,
+        body.enable,
+        body.verify,
+        added_by=admin.id,
+        defer_sync=lambda ids: sync_svc.request_boards(ids, by=admin.id),
     )
     counts: dict[str, int] = {}
     for r in results:
@@ -891,20 +893,20 @@ def admin_health(_: Admin):
 
 @app.post("/admin/health/canary", status_code=202)
 def admin_run_canary(admin: Admin):
-    """Run the live check of every platform now, in the background. Poll
+    """Run the live check of every platform now, in the worker. Poll
     GET /admin/health for the results."""
     from . import canary
 
     log.info("canary requested", extra={"admin_id": admin.id})
-    return canary.start_background()
+    return canary.request(by=admin.id)
 
 
 @app.post("/admin/boards/sync-all", status_code=202)
 def admin_sync_all(admin: Admin):
-    """Refresh every enabled board now, in the background. Poll GET
+    """Refresh every enabled board now, in the worker. Poll GET
     /admin/boards/sync-all for progress."""
     log.info("sync of all boards requested", extra={"admin_id": admin.id})
-    return sync_svc.start_all()
+    return sync_svc.request_all(by=admin.id)
 
 
 @app.get("/admin/boards/sync-all")
@@ -912,10 +914,22 @@ def admin_sync_all_status(_: Admin):
     return sync_svc.sync_all_state() or {}
 
 
-@app.post("/admin/boards/{board_id}/sync")
+@app.post("/admin/boards/{board_id}/sync", status_code=202)
 def admin_sync_now(board_id: int, admin: Admin):
+    """Sync one board now, in the worker. Answers with a task; poll
+    GET /admin/tasks/{id} for the outcome."""
     log.info("manual sync", extra={"admin_id": admin.id, "board_id": board_id})
-    return sync_svc.sync_board(board_id)
+    return sync_svc.request_board(board_id, by=admin.id)
+
+
+@app.get("/admin/tasks/{task_id}")
+def admin_task(task_id: int, _: Admin):
+    from .services import tasks
+
+    t = tasks.get(task_id)
+    if not t:
+        raise HTTPException(404, "no such task")
+    return t
 
 
 RUN_FIELDS = (
@@ -959,7 +973,12 @@ def admin_inventory(_: Admin, s: Sess):
     )
     last_ok = next((r for r in runs if r.status == "complete"), None)
     running = next((r for r in runs if r.status == "running"), None)
+    from .services import tasks
+
+    waiting = tasks.latest("inventory")
     return {
+        # asked for, and the worker has not started it yet
+        "queued": bool(waiting and waiting["state"] == "queued"),
         "last_complete": last_ok.finished_at if last_ok else None,
         "last_crawl": last_ok.crawl if last_ok else None,
         "running": {c: getattr(running, c) for c in RUN_FIELDS}
@@ -978,8 +997,10 @@ def admin_refresh_inventory(admin: Admin):
     web service, the scheduler and the command line."""
     from . import inventory
 
-    r = inventory.start_background(
-        trigger="web", log=logging.getLogger("jobmcp.inventory").info
+    r = inventory.request_refresh(
+        trigger="web",
+        log=logging.getLogger("jobmcp.inventory").info,
+        by=admin.id,
     )
     crawl = r.get("crawl")
     log.info(

@@ -2,7 +2,7 @@
 # Container entrypoint. Containers start in any order, so every service first waits for MySQL.
 #
 #   JOBMCP_RUN_MIGRATIONS=1  (the web service)  create/upgrade the tables, then create the first admin if needed
-#   otherwise                  (the scheduler)    wait until the web service has finished doing that
+#   otherwise                  (worker, scheduler) wait until the web service has finished doing that
 #
 # Privileges: the container starts as root only so the container runtime can finish setting it up (Apple's
 # container-compose, for one, edits /etc/hosts inside each container as the container's default user, and cannot do

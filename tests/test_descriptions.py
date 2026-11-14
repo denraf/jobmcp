@@ -520,3 +520,43 @@ def test_stored_whole_served_to_the_site_but_not_to_agents_or_search():
         assert hit["total"] == 0
         hit = search.search_jobs(s, None, keywords="python")
         assert hit["total"] == 1 and "base64" not in hit["hits"][0].snippet
+
+
+def test_icims_fetches_every_posting_of_a_big_board_in_one_sync(monkeypatch):
+    """A 173-posting board used to leave 23 postings without text until the
+    next hourly sync, because only 150 pages were read per run."""
+    from jobmcp import http
+    from jobmcp.vendors import VENDORS
+
+    n = 173
+    sitemap = (
+        "<urlset>"
+        + "".join(
+            f"<url><loc>https://careers-x.icims.com/jobs/{i}/t/job</loc></url>"
+            for i in range(n)
+        )
+        + "</urlset>"
+    )
+    page = (
+        '<script type="application/ld+json">{"@type": "JobPosting", '
+        '"title": "T", "description": "<p>Text</p>", '
+        '"hiringOrganization": {"name": "UNAVAILABLE"}}</script>'
+    )
+
+    class R:
+        status_code = 200
+
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(
+        http,
+        "get",
+        lambda url, **kw: R(sitemap if url.endswith("sitemap.xml") else page),
+    )
+    jobs = VENDORS["icims"].fetch("careers-x")
+    assert len(jobs) == n and all(j.description == "Text" for j in jobs)
+    assert {j.company for j in jobs} == {"x"}  # not the placeholder

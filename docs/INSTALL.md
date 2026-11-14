@@ -5,7 +5,7 @@ Prometheus metrics. It is written for **Ubuntu 24.04 or Debian 12**; other Linux
 package names. Commands are meant to be pasted in order.
 
 > **Status of this guide.** The application, the hourly sync, the email flows and the metrics were exercised
-> end to end on a development machine against MySQL 8.4. The systemd units (including the scheduler), Caddy/nginx/Apache
+> end to end on a development machine against MySQL 8.4. The systemd units (including the scheduler and the task worker), Caddy/nginx/Apache
 > configs, cron files and Prometheus files in `deploy/` are standard but were **not** run on a real VPS. Follow the "Verify" steps after each
 > section and expect to adjust paths or distro details.
 
@@ -29,12 +29,14 @@ Want to try it first? Skip all of this and run `scripts/dev.sh` on your own comp
               │ Caddy/nginx/Apache │  TLS, forwards to 127.0.0.1:8000, hides /metrics
               └──────┬──────┘
                      │
-          ┌──────────▼───────────┐        ┌───────────────────────────┐
-          │ jobmcp-web         │        │ jobmcp-scheduler        │ hourly job fetch, monthly
-          │ site + API + MCP     │        │ (a second systemd service)│ Common Crawl refresh, daily
-          │ :8000, /metrics      │        └──────────┬────────────────┘ platform check
-          └──────────┬───────────┘                   │
-                     └─────────────┬─────────────────┘
+          ┌──────────▼───────────┐   ┌───────────────────────────┐  ┌───────────────────────────┐
+          │ jobmcp-web         │   │ jobmcp-scheduler        │  │ jobmcp-tasks              │
+          │ site + API + MCP     │   │ hourly job fetch, monthly │  │ imports, "sync all", the  │
+          │ :8000, /metrics      │   │ Common Crawl refresh,     │  │ platform check, the       │
+          │ queues work, shows   │   │ daily platform check      │  │ refresh button: what the  │
+          │ its progress         │   └──────────┬────────────────┘  │ admin portal queues       │
+          └──────────┬───────────┘              │                   └──────────┬────────────────┘
+                     └──────────────────────────┴──────────────────────────────┘
                               ┌────▼────┐
                               │  MySQL  │   127.0.0.1 only
                               └─────────┘
@@ -177,14 +179,21 @@ journalctl -u jobmcp-web -n 30 --no-pager   # look for "jobmcp.config" warnings
 If the log shows a warning about the mail backend or `localhost`, fix `/etc/jobmcp/jobmcp.env` and
 `sudo systemctl restart jobmcp-web`.
 
-Then start the scheduler. It is what fetches jobs, so a site without it is empty (details in step 9):
+Then start the scheduler and the task worker. The scheduler is what fetches jobs, so a site without it is empty
+(details in step 9). The task worker does what the admin portal queues (bulk board imports, *Sync all*, *Sync now*, the
+platform check, the Common Crawl refresh button). The web service only queues that work, so **without the worker those
+buttons stay on "Queued"**:
 
 ```bash
-sudo cp /opt/jobmcp/deploy/systemd/jobmcp-scheduler.service /etc/systemd/system/
+sudo cp /opt/jobmcp/deploy/systemd/jobmcp-scheduler.service /opt/jobmcp/deploy/systemd/jobmcp-tasks.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now jobmcp-scheduler
+sudo systemctl enable --now jobmcp-scheduler jobmcp-tasks
 journalctl -u jobmcp-scheduler -n 20 --no-pager      # "scheduler started ..." and the first hourly sync
+journalctl -u jobmcp-tasks -n 20 --no-pager          # "task worker started ..."
 ```
+
+The worker may run on another machine than the web service as long as it has the same `/etc/jobmcp/jobmcp.env` and
+reaches the same database.
 
 ---
 
@@ -469,7 +478,7 @@ cd /opt/jobmcp
 sudo -u jobmcp git pull                      # or rsync the new source over it
 sudo -u jobmcp .venv/bin/pip install -e .
 sudo -u jobmcp /opt/jobmcp/deploy/bin/jobmcp-admin init-db      # applies schema upgrades
-sudo systemctl restart jobmcp-web jobmcp-scheduler
+sudo systemctl restart jobmcp-web jobmcp-scheduler jobmcp-tasks
 ```
 
 If you are upgrading from a version that cut job descriptions at 4,000 characters, re-fetch everything once so stored
@@ -512,6 +521,7 @@ site's strict content-security policy.
 | Links in emails point at `localhost` | Set `JOBMCP_PUBLIC_BASE_URL`, restart the web service |
 | The Common Crawl refresh never finishes | `tail /var/log/jobmcp/inventory.log`; "incomplete" means Common Crawl's index server errored, and the next daily run resumes it; the history is in the portal under Job boards |
 | No new jobs appear | `systemctl status jobmcp-scheduler` and `journalctl -u jobmcp-scheduler -n 50` (or `tail /var/log/jobmcp/sync.log` / `journalctl -u jobmcp-sync` for the cron/timer setup); `boards stats` shows no *enabled* boards; `jobmcp_sync_last_success_timestamp_seconds` |
+| A button in the admin portal stays on "Queued" | The task worker is not running: `systemctl status jobmcp-tasks` and `journalctl -u jobmcp-tasks -n 50` (compose: `docker compose logs worker`). `sudo -u jobmcp /opt/jobmcp/deploy/bin/jobmcp-admin tasks --once` runs what is queued, once |
 | Some boards keep failing | `boards list --status enabled`; a board that returns 404 three times in a row is disabled automatically |
 | Sync log says "previous sync is still running" every hour | One run takes over an hour; lower the number of enabled boards, or raise `--workers`, or use the worker daemon |
 | `/metrics` returns 403 | By design from anywhere but 127.0.0.1 with no proxy header. Scrape `127.0.0.1:8000` directly, or set `JOBMCP_METRICS_TOKEN` |
@@ -552,7 +562,8 @@ All variables are optional except the database URL, the public base URL and (wit
 | `JOBMCP_CC_RETRIES` | `8` | Retries per Common Crawl request, with a shared, growing pause |
 | `JOBMCP_CC_GIVE_UP_AFTER` | `12` | Consecutive Common Crawl failures after which a crawl stops (and resumes next run) |
 | `JOBMCP_IMPORT_WORKERS` | `6` | Boards a long import checks and stores at once (lower than the sync workers because of memory) |
-| `JOBMCP_IMPORT_IN_PROCESS` | `0` | `1` runs a long bulk import inside the web process. Leave it `0`: the import then runs as its own low-priority process (`jobmcp import-run`) and cannot slow the pages down |
+| `JOBMCP_TASK_SLOTS` | `3` | Tasks the worker service (`jobmcp tasks`) runs at once: an import, a sync of all boards and the platform check can run side by side |
+| `JOBMCP_TASK_STALE_MIN` | `5` | Minutes without a sign of life after which a running task is treated as dead (its worker was killed) and marked failed, so it can be asked for again |
 | `JOBMCP_CANARY_BOARDS` | empty | Extra boards for the daily platform check: `vendor:board,vendor:board` |
 | `JOBMCP_SYNC_WORKERS` | `16` | Boards fetched in parallel by one sync run (thread pool) |
 | `JOBMCP_SYNC_AFTER_REFRESH` | `1` | Start syncing new boards as soon as a Common Crawl refresh ends |

@@ -266,16 +266,20 @@ def compose():
 
 def test_compose_runs_the_whole_application_not_just_the_database():
     c = compose()["services"]
-    assert set(c) == {"db", "web", "scheduler"}
-    assert c["web"]["build"] == "." and c["scheduler"]["build"] == "."
+    assert set(c) == {"db", "web", "scheduler", "worker"}
+    assert all(c[s]["build"] == "." for s in ("web", "scheduler", "worker"))
     assert (
         c["web"]["environment"]["JOBMCP_RUN_MIGRATIONS"] == "1"
     )  # exactly one service prepares the schema
     assert "JOBMCP_RUN_MIGRATIONS" not in c["scheduler"]["environment"]
+    assert "JOBMCP_RUN_MIGRATIONS" not in c["worker"]["environment"]
     assert c["web"]["ports"] == [
         "127.0.0.1:8000:8000"
     ]  # published on loopback only
     assert c["scheduler"]["command"] == ["jobmcp", "scheduler"]
+    # the portal's imports and syncs are done here, not in the web service
+    assert c["worker"]["command"] == ["jobmcp", "tasks"]
+    assert {"db", "web"} <= set(c["worker"]["depends_on"])
     assert "db" in c["web"]["depends_on"] and {"db", "web"} <= set(
         c["scheduler"]["depends_on"]
     )
@@ -291,7 +295,7 @@ def test_compose_has_no_variable_substitution_so_both_runtimes_agree():
     )
     assert not re.search(r"\$\{", code)
     assert (ROOT / "docker" / "app.env").exists()
-    for svc in ("web", "scheduler"):
+    for svc in ("web", "scheduler", "worker"):
         assert compose()["services"][svc]["env_file"] == ["docker/app.env"]
 
 
@@ -304,7 +308,7 @@ def test_compose_services_reach_the_database_by_a_name_both_resolve():
         # (one-time
         # sudo step)
     )
-    for svc in ("web", "scheduler"):
+    for svc in ("web", "scheduler", "worker"):
         url = c[svc]["environment"]["JOBMCP_DATABASE_URL"]
         assert "@db.jobmcp:3306/" in url and url.endswith("charset=utf8mb4")
     assert (

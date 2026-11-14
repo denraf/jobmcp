@@ -1,4 +1,5 @@
 import os
+import threading
 
 import pytest
 from sqlalchemy import text
@@ -20,14 +21,6 @@ def _no_background_sync(monkeypatch):
     """Tests never start a real sync of boards that were just discovered (it
     would go to the network)."""
     monkeypatch.setattr(config, "SYNC_AFTER_REFRESH", False)
-
-
-@pytest.fixture(autouse=True)
-def _imports_in_process(monkeypatch):
-    """Tests fake the platforms with functions, which cannot cross into the
-    child process a real import runs in (tests/test_import_process.py
-    covers that one)."""
-    monkeypatch.setattr(config, "IMPORT_IN_PROCESS", True)
 
 
 @pytest.fixture(autouse=True)
@@ -99,3 +92,21 @@ def fresh_db():
     Base.metadata.create_all(db.engine())
     yield
     Base.metadata.drop_all(db.engine())
+
+
+@pytest.fixture()
+def worker(fresh_db):
+    """The worker service, on a thread: the same loop `jobmcp tasks` runs, so
+    what the web service queues (imports, syncs, the platform check, the
+    Common Crawl refresh) gets done while a test polls for it. A fake platform
+    is a function in this process, which a separate process could not see."""
+    from jobmcp.services import tasks
+
+    stop = threading.Event()
+    t = threading.Thread(
+        target=tasks.run_forever, args=(stop, 3, 0.05), daemon=True
+    )
+    t.start()
+    yield
+    stop.set()
+    t.join(30)

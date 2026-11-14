@@ -1,4 +1,4 @@
-# jobmcp application image: web (site + API + MCP), and the scheduler, from the same image.
+# jobmcp application image: web (site + API + MCP), the worker and the scheduler, from the same image.
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \

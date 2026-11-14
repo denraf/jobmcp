@@ -1,4 +1,5 @@
-# The whole stack, in containers:  db (MySQL)  +  web (site, API, MCP)  +  scheduler (hourly job fetch, monthly Common Crawl refresh)
+# The whole stack, in containers:  db (MySQL)  +  web (site, API, MCP)  +  worker (imports, syncs, what the admin portal
+# asks for)  +  scheduler (hourly job fetch, monthly Common Crawl refresh)
 #
 #   docker compose up -d --build     # Docker.   Apple's container (macOS 26): container-compose build && container-compose up -d
 #   docker compose logs web          # the first start prints the generated admin password; with the default
@@ -62,6 +63,18 @@ services:
     image: jobmcp:local
     depends_on: [db, web]
     command: ["jobmcp", "scheduler"]
+    env_file: [docker/app.env]
+    environment:
+      JOBMCP_DATABASE_URL: mysql+pymysql://jobmcp:jobmcp@db.jobmcp:3306/jobmcp_dev?charset=utf8mb4
+    restart: unless-stopped
+
+  # Does what the admin portal queues: bulk board imports, "sync all", "sync now", the platform check, the Common
+  # Crawl refresh button. The web service only queues it and shows progress, so heavy work never slows the pages.
+  worker:
+    build: .
+    image: jobmcp:local
+    depends_on: [db, web]
+    command: ["jobmcp", "tasks"]
     env_file: [docker/app.env]
     environment:
       JOBMCP_DATABASE_URL: mysql+pymysql://jobmcp:jobmcp@db.jobmcp:3306/jobmcp_dev?charset=utf8mb4

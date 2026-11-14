@@ -4,8 +4,9 @@
   internet ─443─▶ Apache (already running, other sites too)
                     │  reverse proxy, 127.0.0.1:8000
               ┌─────▼──────────────────────────┐             ┌───────────────────┐
-  web VM      │ jobmcp-web   jobmcp-scheduler ├── 3306 ──▶│ MySQL             │  db VM
-              └────────────────────────────────┘  private net │ bind: private IP  │
+  web VM      │ jobmcp-web  jobmcp-scheduler   ├── 3306 ──▶│ MySQL             │  db VM
+              │ jobmcp-tasks (admin portal work)│ private net │ bind: private IP  │
+              └─────────────────────────────────┘             │                   │
                                                               │ nightly backup    │
                                                               └───────────────────┘
 ```
@@ -70,7 +71,7 @@ or press **Refresh from Common Crawl**. The scheduler fetches every hour on its 
 - **Client IP and the login rate limit.** jobmcp trusts the first entry of `X-Forwarded-For`. Apache normally keeps
   whatever header the client sent in front of the real address, so the vhost turns that off (`ProxyAddHeaders Off`) and
   sets the header from the connection itself.
-- **One web VM, one database VM.** The scheduler must run on one machine only, so the playbook refuses an inventory
+- **One web VM, one database VM.** The scheduler and the task worker run on the web VM (the worker could run elsewhere; this playbook keeps it next to the app), and the scheduler must run on one machine only, so the playbook refuses an inventory
   with more than one host in `[web]`.
 - **Backups** land in `/var/backups/jobmcp` on the **database** VM (14 kept). Copy them off that machine: a backup on the
   same disk is not a backup.

@@ -453,19 +453,19 @@ def refresh(
     return _ingest(crawl, lock, vendors, workers, log, trigger, **seams)
 
 
-def start_background(
+def request_refresh(
     vendors: list[str] | None = None,
-    workers: int = config.CC_WORKERS,
     log=_log.info,
     crawls_fn=None,
     trigger: str = "web",
-    **seams,
+    by: int | None = None,
 ) -> dict:
-    """What the admin's button calls. Decides quickly, then returns while the
-    run continues on a thread:
+    """What the admin's button calls, in the web service. Decides quickly
+    (which crawl is newest, is it already ingested, is a refresh already
+    running), then queues the work for the worker and returns:
     {"status": "started" | "up_to_date" | "already_running" | "failed",
     "crawl": ..., "error": ...}."""
-    import threading
+    from .services import ServiceError, tasks
 
     crawl, failed = _newest_crawl(crawls_fn, log, trigger)
     if crawl is None:
@@ -473,19 +473,35 @@ def start_background(
     if _already_ingested(crawl):
         log(f"{crawl} is already fully ingested; nothing to do")
         return {"status": "up_to_date", "crawl": crawl}
-    lock = RefreshLock()
-    if not lock.acquire():
+    if is_running():
         log("another refresh is already running; not starting a second one")
         return {"status": "already_running", "crawl": crawl}
-    _log.info(
-        "refresh of %s started in the background (trigger=%s)", crawl, trigger
+    try:
+        tasks.enqueue(
+            "inventory",
+            {"crawl": crawl, "vendors": vendors, "trigger": trigger},
+            by=by,
+        )
+    except ServiceError:
+        return {"status": "already_running", "crawl": crawl}
+    _log.info("refresh of %s queued (trigger=%s)", crawl, trigger)
+    return {"status": "started", "crawl": crawl}
+
+
+def run_task(payload: dict, ctx, workers: int = config.CC_WORKERS, **seams):
+    """The worker's side of `request_refresh`: take the cross-process lock
+    (the scheduler and the command line use it too) and ingest."""
+    lock = RefreshLock()
+    if not lock.acquire():
+        _log.info("another refresh holds the lock; nothing to do")
+        return {"status": "already_running"}
+    status, _ = _ingest(
+        payload["crawl"],
+        lock,
+        payload.get("vendors"),
+        workers,
+        _log.info,
+        payload.get("trigger", "web"),
+        **seams,
     )
-    t = threading.Thread(
-        target=_ingest,
-        args=(crawl, lock, vendors, workers, log, trigger),
-        kwargs=seams,
-        name="jobmcp-inventory",
-        daemon=True,
-    )
-    t.start()
-    return {"status": "started", "crawl": crawl, "thread": t}
+    return {"status": status, "crawl": payload["crawl"]}

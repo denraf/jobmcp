@@ -60,9 +60,19 @@ The dev database's name must end in `_dev`: `--reset` drops every table and refu
 
 ## Run the whole app in containers
 
-`docker-compose.yml` runs the complete stack: **`db`** (MySQL 8), **`web`** (the site, API and MCP endpoint) and
-**`scheduler`** (fetches the latest jobs every hour and refreshes the Common Crawl inventory once a month, with no cron
-needed). Everything is built from the `Dockerfile` in this repository.
+`docker-compose.yml` runs the complete stack: **`db`** (MySQL 8), **`web`** (the site, API and MCP endpoint),
+**`worker`** (does what the admin portal asks for: bulk board imports, *Sync all*, *Sync now*, the platform check and
+the Common Crawl refresh button) and **`scheduler`** (fetches the latest jobs every hour and refreshes the Common Crawl
+inventory once a month, with no cron needed). Everything is built from the `Dockerfile` in this repository.
+
+The web service never fetches a job board or stores postings in bulk. When an admin asks for that work it writes a row
+to the `tasks` table and shows the progress the worker records there (`queued`, then `running`, then `done` or
+`failed`). So a 100,000-line import or a sync of every board cannot slow the pages down, and the worker can be
+restarted, or run on another machine that reaches the same database, without touching the web service. Imports,
+*Sync all*, the platform check and the refresh run **one at a time**; a task whose worker was killed is marked failed
+after `JOBMCP_TASK_STALE_MIN` minutes so it can be asked for again. The one thing the web service still does itself is
+checking a *single* board on its platform when you add it (up to 20 lines, so the answer can be shown at once); its
+postings are then stored by the worker.
 
 ```bash
 docker compose up -d --build        # Docker
@@ -78,7 +88,7 @@ docker compose down                 # stop; the database lives in a volume and s
   existing account is never changed on restart.
 - **Settings:** edit `docker/app.env` (public URL, SMTP, registration, metrics token, sync interval). With the default
   `JOBMCP_MAIL_BACKEND=console` no email is sent; confirmation and reset links appear in `docker compose logs web`.
-- **Startup order doesn't matter:** each container waits for MySQL (and the scheduler for the schema) and reports
+- **Startup order doesn't matter:** each container waits for MySQL (and the scheduler and worker for the schema) and reports
   progress while it waits, instead of looking hung. `web` runs `init-db` (which also upgrades an older database).
 - **Security:** the app runs as an unprivileged user with no way to regain privileges (the entrypoint starts as root only
   to hand over immediately, and stops the container if it can't). The site is published on `127.0.0.1` only. `/metrics`
@@ -378,8 +388,26 @@ jobmcp can enforce, so use an agent that asks before it submits.
 ## Vendors
 
 Greenhouse, Lever (incl. EU), Ashby, Workable, SmartRecruiters, Recruitee, BambooHR, Personio,
-Teamtailor, Breezy, Workday, iCIMS, Paylocity and Gem — one module each in `jobmcp/vendors/`. To add one: subclass
-`Vendor` (or `SubdomainVendor`), implement `board_from_url` and `fetch`, register it in `vendors/__init__.py`.
+Teamtailor, Breezy, Workday, iCIMS, Paylocity and Gem, plus Jobvite, Pinpoint, Rippling, ApplyToJob (JazzHR),
+Homerun, CareerPlug, Softgarden, AgileHR, Freshteam, Recruiterflow, Comeet, JOIN, HiBob, CareerPuck, Fountain,
+Getro, Crelate, Manatal, Zoho Recruit, ApplicantPro, iSolved Hire, PrismHR Hire, UltiPro, UKG Pro Recruiting,
+Y Combinator, Occupop, TalentLyft, Trakstar Hire, Dover, Jibe, Recruit CRM, Oracle Recruiting Cloud, Eightfold,
+Loxo, Simplicant, PageUp and PeopleAdmin — one module each in `jobmcp/vendors/`. To add
+one: subclass `Vendor` (or `SubdomainVendor`), implement `board_from_url` and `fetch`, register it in
+`vendors/__init__.py` and add its label to `VENDOR_LABEL` in `jobmcp/web/js/common.js`.
+
+Most take a single slug (the subdomain or the first path part of the careers URL). A few need more, and
+the admin portal shows the exact form per platform:
+
+- **Comeet**: `<name>/<id>` (`biocatch/03.00E`, the two parts after `/jobs/`).
+- **Fountain**: `<company>/<group>/<country>` (`clear/clear/US`).
+- **UltiPro**: `<tenant>/<id>` (the parts around `/JobBoard/`); **UKG**: `<sub>/<company>/<id>`.
+- **Recruit CRM**: the account name, case-sensitive.
+- **Oracle**: `<tenant>.fa.<region>/<site>` (`ccyj.fa.us6/CX`); **PageUp**: `<id>/<site>` (`994/cw`).
+
+Platforms whose list page has no description (ApplyToJob, Jobvite, JOIN, Homerun, Freshteam, Getro, Y Combinator,
+UltiPro and others) are read like iCIMS below: each posting's own page is fetched, only for postings not already
+stored. Fountain and Dover keep the text of a posting out of reach, so their postings have a title and a place.
 
 Two of them work differently from the JSON-API platforms:
 
@@ -388,6 +416,11 @@ Two of them work differently from the JSON-API platforms:
   sync, the rest follow on the next run), so an hourly sync stays cheap.
 - **Paylocity** (board key is the tenant's GUID from `recruiting.paylocity.com/recruiting/jobs/All/<guid>`): the job
   list page embeds its postings as a JSON object. The list carries only the start of each description.
+
+Boards can be seeded in bulk from the company list of [OpenPostings](https://github.com/Masterjx9/OpenPostings):
+export the `url_string` column of the `companies` table of its `jobs.db` (one URL per line) and run
+`python scripts/openpostings-slugs.py urls.txt > boards.txt`. The result is `vendor:board` lines for the admin
+portal's bulk import (URLs for a platform jobmcp does not support are skipped).
 
 A vendor that answers with a page that is not the data (a block page, a Workday listing whose total changes
 part-way) is a failed fetch, not an empty board: the board keeps its stored postings and is retried later, instead
@@ -517,8 +550,8 @@ throttled index never slows job syncing and a big sync never starves the refresh
 
 ## Logging
 
-All processes (web, scheduler, worker, CLI) log to **stdout**, which is what the container runtime collects:
-`docker compose logs -f app scheduler` (or `container logs -f <name>`), and `journalctl -u jobmcp-web -f` under systemd.
+All processes (web, scheduler, task worker, CLI) log to **stdout**, which is what the container runtime collects:
+`docker compose logs -f web worker scheduler` (or `container logs -f <name>`), and `journalctl -u jobmcp-web -f` under systemd.
 
 | Setting | Meaning |
 |---|---|

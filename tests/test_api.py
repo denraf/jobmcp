@@ -149,7 +149,12 @@ def test_admin_controls_slugs(c, monkeypatch):
     )
 
     r = c.post(f"/admin/boards/{bid}/sync", headers=ah)
-    assert r.status_code == 200 and r.json()["board"] == "big"
+    assert r.status_code == 202  # queued; the worker does the syncing
+    from jobmcp.services import tasks
+
+    tasks.run_pending()
+    done = c.get(f"/admin/tasks/{r.json()['id']}", headers=ah).json()
+    assert done["state"] == "done" and done["result"]["board"] == "big"
     assert c.get("/admin/sync-runs", headers=ah).json()[0]["board_id"] == bid
     c.patch(f"/admin/boards/{bid}", headers=ah, json={"status": "disabled"})
     assert bid not in sync.claim_due(10)
