@@ -25,7 +25,7 @@ LD = re.compile(
     re.S | re.I,
 )
 MAX_PER_BOARD = 1000  # postings listed
-DETAIL_PER_RUN = 150  # pages fetched per sync; the rest follow on later runs
+DETAIL_PER_RUN = 500  # pages fetched per sync; the rest follow on later runs
 DETAIL_THREADS = 4
 NOT_TENANTS = {"www", "login", "app", "api", "careers", "jobs", "static"}
 
@@ -93,10 +93,7 @@ class ICIMS(Vendor):
                         "location": _location(it),
                         "posted_at": str(it.get("datePosted") or ""),
                         "description": clean_html(it.get("description")),
-                        "company": (
-                            (it.get("hiringOrganization") or {}).get("name")
-                        )
-                        or "",
+                        "company": _company(it),
                     }
         return {}
 
@@ -187,3 +184,11 @@ def _location(it: dict) -> str:
     if str(it.get("jobLocationType") or "").upper() == "TELECOMMUTE":
         out = ("Remote " + out).strip()
     return out
+
+
+def _company(it: dict) -> str:
+    """The hiring organisation, unless the tenant printed a placeholder."""
+    name = (it.get("hiringOrganization") or {}).get("name") or ""
+    return (
+        "" if name.strip().upper() in ("UNAVAILABLE", "NONE", "NULL") else name
+    )
