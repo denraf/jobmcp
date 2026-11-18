@@ -102,6 +102,7 @@ def search_jobs(
     country=None,
     exclude_agencies: bool = False,
     sort: str = "relevance",
+    salary=None,
 ) -> dict:
     """`user_id=None` is an anonymous search: no ledger, so nothing is hidden
     and no status is shown.
@@ -143,7 +144,11 @@ def search_jobs(
         f.append(Job.location.contains(location, autoescape=True))
     if remote_only:
         workplace = "remote"
-    f.extend(label_filters(workplace, seniority, country, exclude_agencies))
+    f.extend(
+        label_filters(
+            workplace, seniority, country, exclude_agencies, salary_band=salary
+        )
+    )
     if vendor:
         f.append(Job.vendor == vendor)
     if company:

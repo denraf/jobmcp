@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import db
-from . import cache, config, mailer, metrics
+from . import cache, config, mailer, metrics, salary
 from .ratelimit import auth_limit, client_ip
 from .security import hash_token
 from .orm import ApiToken, Application, Board, InventoryRun, Job, SyncRun, User
@@ -122,6 +122,14 @@ def job_out(j: Job, full: bool = False) -> dict:
         "seniority": j.seniority,
         "country": j.country,
         "agency": bool(j.board.is_agency),
+        # the pay the posting states, when it does: shown next to the location
+        "salary": salary.format_salary(
+            j.salary_min, j.salary_max, j.salary_currency, j.salary_period
+        ),
+        "salary_min": j.salary_min,
+        "salary_max": j.salary_max,
+        "salary_currency": j.salary_currency or None,
+        "salary_period": j.salary_period or None,
     }
     if full:
         d["description"] = j.description
@@ -407,10 +415,11 @@ def search_jobs(
     country: str | None = None,
     exclude_agencies: bool = False,
     sort: str = "relevance",
+    salary: str | None = None,
 ):
     """Search all open jobs by title and/or keywords in title+description. See
-    services/search.py for syntax. `seniority` and `country` take
-    comma-separated values (senior,lead / US,CA)."""
+    services/search.py for syntax. `seniority`, `country` and `salary` take
+    comma-separated values (senior,lead / US,CA / 100k-150k,150k-200k)."""
     r = search.search_jobs(
         s,
         u.id,
@@ -430,6 +439,7 @@ def search_jobs(
         country=country,
         exclude_agencies=exclude_agencies,
         sort=sort,
+        salary=salary,
     )
     return {**r, "hits": [hit_out(h) for h in r["hits"]]}
 
@@ -567,6 +577,7 @@ def public_jobs(
     country: str | None = None,
     exclude_agencies: bool = False,
     sort: str = "newest",
+    salary: str | None = None,
 ):
     def compute():
         r = search.search_jobs(
@@ -589,6 +600,7 @@ def public_jobs(
             country=country,
             exclude_agencies=exclude_agencies,
             sort=sort,
+            salary=salary,
         )
         return {**r, "hits": [hit_out(h) for h in r["hits"]]}
 
@@ -610,6 +622,7 @@ def public_jobs(
         country,
         exclude_agencies,
         sort,
+        salary,
     )
     out = cache.public.get_or_compute(key, compute, cache.ttl())
     if cache.ttl() > 0:

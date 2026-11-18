@@ -12,6 +12,7 @@ from html import unescape
 from typing import Callable
 
 from .. import http
+from .. import salary
 from ..models import Job, clean_html
 
 LD = re.compile(
@@ -70,11 +71,16 @@ def ld_fields(it: dict) -> dict:
     """A JobPosting as the plain fields of a Job (only those it has)."""
     org = it.get("hiringOrganization")
     company = org.get("name") if isinstance(org, dict) else org
+    description = clean_html(it.get("description"))
+    if description and not salary.parse(description):
+        # pay given only as structured data: say it in the text
+        pay = salary.from_schema_org(it.get("baseSalary"))
+        description = f"{description}\n\n{pay}" if pay else description
     out = {
         "title": unescape(str(it.get("title") or "")).strip(),
         "location": ld_location(it),
         "posted_at": str(it.get("datePosted") or ""),
-        "description": clean_html(it.get("description")),
+        "description": description,
         "company": ""
         if str(company or "").strip().lower() in EMPTY
         else unescape(str(company)).strip(),

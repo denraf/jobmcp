@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .. import http
+from .. import http, salary
 from ..models import Job, normalize_text
 from .base import Vendor, valid_slug
 
@@ -23,12 +23,19 @@ class Ashby(Vendor):
         ]  # slugs are case-sensitive enough that we keep the casing
 
     def fetch(self, board):
-        r = http.get(f"https://api.ashbyhq.com/posting-api/job-board/{board}")
+        r = http.get(
+            f"https://api.ashbyhq.com/posting-api/job-board/{board}",
+            params={"includeCompensation": "true"},
+        )
         r.raise_for_status()
         out = []
         for j in r.json().get("jobs", []):
             if j.get("isListed") is False:
                 continue
+            desc = normalize_text(j.get("descriptionPlain"))
+            if not salary.parse(desc):  # pay given only as a field
+                pay = salary.from_ashby(j.get("compensation"))
+                desc = f"{desc}\n\n{pay}" if pay and desc else desc or pay
             out.append(
                 Job(
                     vendor=self.name,
@@ -39,7 +46,7 @@ class Ashby(Vendor):
                     location=j.get("location") or "",
                     url=j.get("jobUrl") or "",
                     posted_at=j.get("publishedAt") or "",
-                    description=normalize_text(j.get("descriptionPlain")),
+                    description=desc,
                 )
             )
         return out

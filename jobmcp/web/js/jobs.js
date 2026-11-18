@@ -8,7 +8,7 @@ const form = $('#filters');
 const list = $('#list');
 
 // ── filters <-> URL ──
-const FIELDS = ['title', 'keywords', 'location', 'vendor', 'age', 'seniority', 'country'];
+const FIELDS = ['title', 'keywords', 'location', 'vendor', 'age', 'seniority', 'country', 'salary'];
 function readUrl() {
   const q = new URLSearchParams(location.search);
   for (const f of FIELDS) if (q.has(f)) form.elements[f].value = q.get(f);
@@ -48,8 +48,14 @@ function params(offset) {
   if (form.elements.remote.checked) q.set('remote_only', 'true');
   if (form.elements.seniority.value) q.set('seniority', form.elements.seniority.value);
   if (form.elements.country.value) q.set('country', form.elements.country.value);
+  if (form.elements.salary.value) q.set('salary', form.elements.salary.value);
   if (form.elements.noagency.checked) q.set('exclude_agencies', 'true');
   return q;
+}
+
+// the pay the posting states, right after the location (nothing when it states none)
+function salaryChip(j) {
+  return j.salary ? h('span', { class: 'salary', text: j.salary, title: 'Salary stated in the posting' }) : null;
 }
 
 // 'Remote' / 'Hybrid' as a chip, unless the location already says it
@@ -82,6 +88,7 @@ function row(j) {
     h('div', {}, h('button', { class: 'job-title', type: 'button', text: j.title, onclick: (e) => { e.stopPropagation(); open(); } })),
     h('div', { class: 'job-side' }, h('span', { text: j.posted_at ? ago(j.posted_at) : 'Added ' + ago(j.listed_at) }), saveButton(j.id)),
     h('div', { class: 'job-meta' }, h('span', { text: j.company || 'Company' }), j.location ? h('span', { text: j.location }) : null,
+      salaryChip(j),
       workplaceChip(j),
       LEVEL[j.seniority] ? h('span', { text: LEVEL[j.seniority] }) : null,
       j.agency ? h('span', { text: 'Staffing agency' }) : null,
@@ -135,6 +142,7 @@ async function openDetail(id) {
       h('button', { class: 'btn btn-quiet btn-sm detail-close', type: 'button', text: 'Back to jobs', onclick: closeDetail }),
       h('h2', { text: j.title }),
       h('div', { class: 'job-meta ui' }, h('span', { text: j.company }), j.location ? h('span', { text: j.location }) : null,
+        salaryChip(j),
         workplaceChip(j),
         LEVEL[j.seniority] ? h('span', { text: LEVEL[j.seniority] }) : null,
         j.agency ? h('span', { text: 'Staffing agency' }) : null,

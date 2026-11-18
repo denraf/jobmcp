@@ -218,6 +218,21 @@ class Job(Base):
     country: Mapped[str] = mapped_column(
         String(2), default="", server_default=""
     )
+    # Pay stated in the posting (salary.py). Amounts are per year in
+    # salary_currency; salary_period is the period it was quoted in (a rate
+    # of $45 an hour is stored as a year and shown as /hr again). The USD
+    # pair is approximate and only places a posting in a salary band.
+    # NULL = the posting states no pay.
+    salary_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    salary_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    salary_currency: Mapped[str] = mapped_column(
+        String(3), default="", server_default=""
+    )
+    salary_period: Mapped[str] = mapped_column(
+        String(5), default="", server_default=""
+    )
+    salary_usd_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    salary_usd_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     first_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     # What lists sort by: when the company says it was published, else when
@@ -237,6 +252,13 @@ class Job(Base):
         Index("ix_jobs_active_workplace", "active", "workplace", "board_id"),
         Index("ix_jobs_active_seniority", "active", "seniority", "board_id"),
         Index("ix_jobs_active_country", "active", "country", "board_id"),
+        Index(
+            "ix_jobs_active_salary",
+            "active",
+            "salary_usd_min",
+            "salary_usd_max",
+            "board_id",
+        ),
         # The jobs list walks the newest postings and checks every filter:
         # all of them are in this index, so that walk never reads a row.
         Index(
@@ -248,6 +270,8 @@ class Job(Base):
             "workplace",
             "seniority",
             "country",
+            "salary_usd_min",
+            "salary_usd_max",
         ),
     )
 

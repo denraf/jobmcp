@@ -20,9 +20,9 @@ import requests
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import defer
 
-from .. import classify, config, db
+from .. import classify, config, db, salary
 from ..models import Job as Fetched
-from ..models import fit
+from ..models import fit, strip_data_uris
 from ..orm import Board, Job, SyncRun, utcnow
 from ..vendors import VENDORS
 from ..vendors.base import BoardGone
@@ -303,6 +303,10 @@ def _apply_jobs(
             row.country = classify.country(f.location)
             if f.description:  # keep the stored one if this fetch had none
                 row.description = fit(f.description)
+                for col, val in salary.columns(
+                    strip_data_uris(f.description)
+                ).items():
+                    setattr(row, col, val)
         else:
             posted = parse_dt(f.posted_at)
             row = Job(
@@ -318,6 +322,7 @@ def _apply_jobs(
                 workplace=classify.workplace(f.location, f.title),
                 seniority=classify.seniority(f.title),
                 country=classify.country(f.location),
+                **salary.columns(strip_data_uris(f.description)),
                 description=fit(f.description),
                 first_seen=now,
                 last_seen=now,

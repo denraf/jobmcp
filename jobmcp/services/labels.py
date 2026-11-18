@@ -1,9 +1,12 @@
-"""Filters on the derived labels (workplace, seniority, country, agency),
+"""Filters on the derived labels (workplace, seniority, country, agency,
+salary band),
 shared by search and preference matching so the two always agree."""
 
 from __future__ import annotations
 
-from .. import classify
+from sqlalchemy import and_, or_
+
+from .. import classify, salary
 from ..orm import Board, Job
 from . import ServiceError
 
@@ -37,8 +40,32 @@ def countries(v) -> list[str]:
     return out
 
 
+def salary_bands(v) -> list[str]:
+    try:
+        return salary.band_keys(_list(v))
+    except ValueError as e:
+        raise ServiceError(str(e)) from None
+
+
+def salary_filter(bands: list[str]):
+    """Postings whose stated pay overlaps any of the bands (an approximate
+    USD per year, see salary.py). Postings with no stated pay never match."""
+    parts = []
+    for b in bands:
+        lo, hi = salary.BANDS[b]
+        cond = [Job.salary_usd_max >= lo]
+        if hi is not None:
+            cond.append(Job.salary_usd_min < hi)
+        parts.append(and_(*cond))
+    return or_(*parts)
+
+
 def label_filters(
-    workplace=None, seniority=None, country=None, exclude_agencies=False
+    workplace=None,
+    seniority=None,
+    country=None,
+    exclude_agencies=False,
+    salary_band=None,
 ) -> list:
     """SQL conditions for the derived labels, shared with preference matching
     so the two always agree."""
@@ -53,4 +80,6 @@ def label_filters(
         f.append(Job.country.in_(countries(country)))
     if exclude_agencies:
         f.append(Board.is_agency == 0)
+    if salary_bands(salary_band):
+        f.append(salary_filter(salary_bands(salary_band)))
     return f

@@ -438,9 +438,32 @@ Each posting is labelled when it is synced (rules in `jobmcp/classify.py`, no ex
   search`, well-known agency names). An admin can override it per board on the Job boards tab.
 
 They are heuristics, so they are for filtering, not facts. They show on the jobs page, filter the public search, the
-REST search and the MCP `search_jobs` tool (`workplace`, `seniority`, `country`, `exclude_agencies`), and can be set
+REST search and the MCP `search_jobs` tool (`workplace`, `seniority`, `country`, `exclude_agencies`, and the salary
+band below), and can be set
 in a user's preferences (levels, countries, skip agencies) so the agent's matches respect them. Existing postings are
 labelled by `jobmcp init-db` (in batches).
+
+## Salary
+
+When a posting states its pay, jobmcp reads it (`jobmcp/salary.py`) and shows it next to the location on the jobs page
+(`$120k–150k`, `€55k–65k`, `$45–60/hr`). The jobs page has a **Salary** filter with six bands (under 50k, 50k–75k,
+75k–100k, 100k–150k, 150k–200k, 200k and over). The same filter is `salary=100k-150k,150k-200k` on the REST search
+(`/public/jobs`, `/jobs/search`) and `salary_band` on the MCP `search_jobs` tool; results carry `salary`,
+`salary_min`, `salary_max`, `salary_currency` and `salary_period`.
+
+- **Where the pay comes from:** the text of the description (most US postings state a range, and many European ones
+  do), Ashby's compensation field, and schema.org `baseSalary` on posting pages. Coverage depends on the employer:
+  on real boards it ranges from a few percent to about 95%.
+- **Precision before recall.** A figure counts only when the words around it say it is pay and not a bonus, funding,
+  equity, a benefit or revenue. "Up to $150k" and "from $90k" are ignored because a range needs both ends. A posting
+  that states no pay has no salary and never matches a band.
+- **Periods:** hourly, weekly, monthly and daily pay is stored per year (an hour is 2,080 hours) and shown as quoted.
+  Several ranges in one posting (per location or level) become one span.
+- **Bands are approximate.** They are in US dollars per year. A posting in another currency is placed by a rough fixed
+  rate (`USD_RATE` in `salary.py`), and a posting is in a band when its range overlaps it, so a $90k–110k role shows
+  under both 75k–100k and 100k–150k. The amount shown is always the posting's own.
+- **Existing postings** are read by `jobmcp init-db` (in batches, a few minutes on a large database); every sync
+  refreshes the pay of the postings it fetches.
 
 ## Platform health
 

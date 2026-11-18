@@ -26,7 +26,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 
-from . import config, db, metrics
+from . import config, db, metrics, salary
 from .models import strip_data_uris
 from .orm import User
 from .services import (
@@ -175,6 +175,16 @@ def _job(j, full=False) -> dict:
         "workplace": j.workplace,
         "seniority": j.seniority,
         "country": j.country,
+        # pay the posting states (null when it does not), per year in the
+        # posting's currency unless salary_period says it was quoted otherwise
+        "salary": salary.format_salary(
+            j.salary_min, j.salary_max, j.salary_currency, j.salary_period
+        )
+        or None,
+        "salary_min": j.salary_min,
+        "salary_max": j.salary_max,
+        "salary_currency": j.salary_currency or None,
+        "salary_period": j.salary_period or None,
         "staffing_agency": bool(j.board.is_agency),
         "apply_url": j.url,
         "posted_at": j.posted_at.isoformat() if j.posted_at else None,
@@ -245,6 +255,7 @@ def search_jobs(
     country: list[str] | None = None,
     exclude_agencies: bool = False,
     sort: str = "relevance",
+    salary_band: list[str] | None = None,
 ) -> dict:
     """Search ALL open jobs (not just the user's preference matches) by job
     title and/or any keyword
@@ -257,8 +268,11 @@ def search_jobs(
     max_age_days; workplace ('remote' or 'hybrid'); seniority (any of intern,
     entry, mid, senior, lead, executive; 'mid' = no seniority word in the
     title); country (ISO codes like US, GB, DE); exclude_agencies=true hides
-    staffing/recruiting agencies. Applied/skipped jobs are hidden unless
-    include_applied=true.
+    staffing/recruiting agencies; salary_band (any of under-50k, 50k-75k,
+    75k-100k, 100k-150k, 150k-200k, 200k-plus: approximate USD per year) keeps
+    only jobs whose stated pay overlaps a band, and drops jobs that state
+    none. Results carry `salary` (e.g. "$120k-150k") when the posting states
+    it. Applied/skipped jobs are hidden unless include_applied=true.
     sort: 'relevance' (default) ranks title hits first, newest within each;
     'newest' is strictly by publish date. Results include listed_at (the
     publish date, else when we first saw the job) and a description snippet;
@@ -284,6 +298,7 @@ def search_jobs(
             country=country,
             exclude_agencies=exclude_agencies,
             sort=sort,
+            salary=salary_band,
         )
         return {
             **{k: v for k, v in r.items() if k != "hits"},

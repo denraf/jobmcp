@@ -32,6 +32,8 @@ def is_current() -> bool:
         <= {c["name"] for c in insp.get_columns("jobs")}
         and "is_agency" in {c["name"] for c in insp.get_columns("boards")}
         and "sort_at" in {c["name"] for c in insp.get_columns("jobs")}
+        and {c for c, _ in SALARY_COLUMNS}
+        <= {c["name"] for c in insp.get_columns("jobs")}
         and {"seniority", "countries", "exclude_agencies"}
         <= {c["name"] for c in insp.get_columns("preferences")}
     )
@@ -105,6 +107,7 @@ def ensure_schema() -> list[str]:
         changed.append("inventory_runs.pages_total, inventory_runs.trigger")
     changed += _classification_columns(eng)
     changed += _sort_column(eng)
+    changed += _salary_columns(eng)
     changed += _filter_indexes(eng)
     for name in changed:
         log.info("applied: %s", name)
@@ -141,12 +144,90 @@ def _sort_column(eng) -> list[str]:
     return ["jobs.sort_at (lists now sort by publish date)"]
 
 
+SALARY_COLUMNS = (
+    ("salary_min", "INT NULL"),
+    ("salary_max", "INT NULL"),
+    ("salary_currency", "VARCHAR(3) NOT NULL DEFAULT ''"),
+    ("salary_period", "VARCHAR(5) NOT NULL DEFAULT ''"),
+    ("salary_usd_min", "INT NULL"),
+    ("salary_usd_max", "INT NULL"),
+)
+
+
+def _salary_columns(eng) -> list[str]:
+    """The pay found in each posting. Existing postings are read once, in
+    batches; syncs also refresh it, so an interrupted backfill is finished by
+    the next hourly run."""
+    have = {c["name"] for c in inspect(eng).get_columns("jobs")}
+    missing = [(c, ddl) for c, ddl in SALARY_COLUMNS if c not in have]
+    if not missing:
+        return []
+    with eng.begin() as c:
+        for col, ddl in missing:
+            c.execute(text(f"ALTER TABLE jobs ADD COLUMN {col} {ddl}"))
+    n = backfill_job_salaries(eng)
+    return [f"jobs.salary_* ({n} postings carry a stated salary)"]
+
+
+def backfill_job_salaries(eng, batch: int = 500) -> int:
+    """Read the pay out of every posting's text, `batch` rows at a time.
+    Returns how many postings state one."""
+    from . import salary
+    from .models import strip_data_uris
+
+    found, last = 0, 0
+    while True:
+        with eng.begin() as c:
+            rows = c.execute(
+                text(
+                    "SELECT id, title, description FROM jobs WHERE id > :last "
+                    "ORDER BY id LIMIT :n"
+                ),
+                {"last": last, "n": batch},
+            ).all()
+            if not rows:
+                return found
+            params = []
+            for r in rows:
+                s = salary.parse(strip_data_uris(r.description or ""))
+                if not s:
+                    continue
+                lo, hi = salary.usd_range(s)
+                params.append(
+                    {
+                        "id": r.id,
+                        "lo": s.low,
+                        "hi": s.high,
+                        "cur": s.currency,
+                        "per": s.period,
+                        "ulo": lo,
+                        "uhi": hi,
+                    }
+                )
+            if params:
+                c.execute(
+                    text(
+                        "UPDATE jobs SET salary_min = :lo, salary_max = :hi, "
+                        "salary_currency = :cur, salary_period = :per, "
+                        "salary_usd_min = :ulo, salary_usd_max = :uhi "
+                        "WHERE id = :id"
+                    ),
+                    params,
+                )
+                found += len(params)
+        last = rows[-1].id
+
+
 FILTER_INDEXES = {
     "ix_jobs_active_workplace": "active, workplace, board_id",
     "ix_jobs_active_seniority": "active, seniority, board_id",
     "ix_jobs_active_country": "active, country, board_id",
+    "ix_jobs_active_salary": (
+        "active, salary_usd_min, salary_usd_max, board_id"
+    ),
     "ix_jobs_browse": (
-        "active, sort_at, id, board_id, workplace, seniority, country"
+        "active, sort_at, id, board_id, workplace, seniority, country, "
+        "salary_usd_min, salary_usd_max"
     ),
 }
 
@@ -155,13 +236,20 @@ def _filter_indexes(eng) -> list[str]:
     """Indexes for the jobs-page filters. Without them a filtered count reads
     every posting's full row, descriptions included: tens of seconds on a
     large table."""
-    have = {i["name"] for i in inspect(eng).get_indexes("jobs")}
+    have = {
+        i["name"]: list(i["column_names"])
+        for i in inspect(eng).get_indexes("jobs")
+    }
     made = []
     for name, cols in FILTER_INDEXES.items():
-        if name not in have:
-            with eng.begin() as c:
-                c.execute(text(f"CREATE INDEX {name} ON jobs ({cols})"))
-            made.append(name)
+        want = [x.strip() for x in cols.split(",")]
+        if have.get(name) == want:
+            continue
+        with eng.begin() as c:
+            if name in have:  # an older definition: it lacks a column
+                c.execute(text(f"DROP INDEX {name} ON jobs"))
+            c.execute(text(f"CREATE INDEX {name} ON jobs ({cols})"))
+        made.append(name)
     return [f"index {n}" for n in made]
 
 
