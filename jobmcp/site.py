@@ -13,7 +13,6 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.responses import (
-    FileResponse,
     JSONResponse,
     PlainTextResponse,
     Response,
@@ -22,7 +21,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
-from . import config, db, logs, mcp_server, metrics
+from . import config, db, logs, mcp_server, metrics, seo
 from .api import app as api_app
 
 # Minimal OS images (python:slim) have no MIME table entry for web fonts;
@@ -172,7 +171,13 @@ app.mount("/static", StaticFiles(directory=WEB), name="static")
 
 def _page(name: str):
     def handler():
-        return FileResponse(WEB / name, media_type="text/html")
+        # __BASE__ is the public address, so canonical and share URLs are
+        # absolute and follow JOBMCP_PUBLIC_BASE_URL.
+        text = (WEB / name).read_text(encoding="utf-8")
+        return Response(
+            text.replace("__BASE__", config.PUBLIC_BASE_URL),
+            media_type="text/html",
+        )
 
     return handler
 
@@ -181,6 +186,9 @@ for path, name in PAGES.items():
     app.add_api_route(
         path, _page(name), methods=["GET"], include_in_schema=False
     )
+
+
+app.include_router(seo.router)
 
 
 @app.get("/healthz", include_in_schema=False)
@@ -233,6 +241,8 @@ async def security_headers(request, call_next):
         resp.headers.setdefault("Content-Security-Policy", CSP)
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("Referrer-Policy", "same-origin")
+        if p in seo.PRIVATE_PAGES:
+            resp.headers.setdefault("X-Robots-Tag", "noindex, nofollow")
         if p.startswith("/static/") and not p.endswith((".woff2",)):
             resp.headers.setdefault(
                 "Cache-Control", "no-cache"
@@ -246,13 +256,14 @@ class PublicGZip(GZipMiddleware):
     response that holds a secret next to attacker-influenced text is the
     BREACH attack, and those responses are small anyway."""
 
-    PREFIXES = ("/static/", "/api/public/")
+    PREFIXES = ("/static/", "/api/public/", "/jobs/")
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
         if scope["type"] == "http" and (
             path in ("/", "/jobs", "/privacy", "/portal")
             or path.startswith(self.PREFIXES)
+            or path.endswith((".xml", ".txt"))
         ):
             return await super().__call__(scope, receive, send)
         return await self.app(scope, receive, send)

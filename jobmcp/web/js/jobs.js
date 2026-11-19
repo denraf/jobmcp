@@ -85,7 +85,7 @@ function saveButton(id) {
 function row(j) {
   const open = () => openDetail(j.id);
   const li = h('li', { class: 'job', 'data-id': j.id, 'aria-current': j.id === state.openId ? 'true' : false, onclick: open },
-    h('div', {}, h('button', { class: 'job-title', type: 'button', text: j.title, onclick: (e) => { e.stopPropagation(); open(); } })),
+    h('div', {}, h('a', { class: 'job-title', href: '/jobs/' + j.id, text: j.title, onclick: (e) => { e.preventDefault(); e.stopPropagation(); open(); } })),
     h('div', { class: 'job-side' }, h('span', { text: j.posted_at ? ago(j.posted_at) : 'Added ' + ago(j.listed_at) }), saveButton(j.id)),
     h('div', { class: 'job-meta' }, h('span', { text: j.company || 'Company' }), j.location ? h('span', { text: j.location }) : null,
       salaryChip(j),

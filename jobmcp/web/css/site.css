@@ -227,7 +227,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .job { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s2) var(--s4); padding: var(--s4) var(--s3); border-bottom: 0.5px solid var(--rule); cursor: pointer; font-family: var(--ui); }
 .job:hover { background: var(--surface); }
 .job[aria-current="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--stamp); }
-.job-title { font-weight: 400; font-size: 1.0625rem; line-height: 1.25; background: none; border: 0; padding: 0; text-align: left; color: var(--ink); cursor: pointer; font-family: inherit; }
+.job-title { font-weight: 400; font-size: 1.0625rem; line-height: 1.25; background: none; border: 0; padding: 0; text-align: left; color: var(--ink); cursor: pointer; text-decoration: none; font-family: inherit; }
 .job-title:hover { text-decoration: underline; text-underline-offset: 0.18em; }
 .job-meta { grid-column: 1; color: var(--ink-2); font-size: 0.95rem; display: flex; flex-wrap: wrap; gap: 2px var(--s4); }
 .job-meta span + span::before { content: ""; }

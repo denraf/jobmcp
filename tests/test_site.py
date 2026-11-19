@@ -170,3 +170,103 @@ def test_startup_warns_about_a_production_setup_that_cannot_send_mail(
     monkeypatch.setattr(config, "DEV_MODE", True)
     monkeypatch.setattr(config, "PUBLIC_BASE_URL", "http://localhost:8000")
     assert site.startup_warnings() == []
+
+
+# ── search and answer-engine discovery ──
+def _seed_job(**kw):
+    from jobmcp.services import sync
+
+    sync.sync_board(mk_board(), lambda v, s: [fj("Data Engineer", **kw)])
+    return fj  # noqa: RET504
+
+
+def _job_id(c):
+    return c.get("/api/public/jobs").json()["hits"][0]["id"]
+
+
+def test_robots_and_llms_txt(c):
+    r = c.get("/robots.txt")
+    assert r.status_code == 200 and "Sitemap: " in r.text
+    assert "User-agent: GPTBot" in r.text and "Disallow: /portal" in r.text
+    assert "/jobs" not in "".join(
+        ln for ln in r.text.splitlines() if ln.startswith("Disallow")
+    )
+    llms = c.get("/llms.txt")
+    assert llms.status_code == 200 and "/mcp/" in llms.text
+
+
+def test_private_pages_are_noindex_public_pages_have_canonical(c):
+    for p in ("/login", "/portal", "/reset"):
+        r = c.get(p)
+        assert "noindex" in r.headers["x-robots-tag"]
+        assert 'content="noindex' in r.text
+    for p in ("/", "/jobs", "/privacy"):
+        r = c.get(p)
+        assert "__BASE__" not in r.text
+        assert '<link rel="canonical" href="http' in r.text
+        assert "x-robots-tag" not in r.headers
+    assert '"@type": "FAQPage"' in c.get("/").text
+
+
+def test_job_page_is_server_rendered_with_jobposting_data(c):
+    _seed_job(desc="Build <b>pipelines</b>.\n\nWork with Airflow.")
+    jid = _job_id(c)
+    # bare id redirects to the canonical slug
+    r = c.get(f"/jobs/{jid}", follow_redirects=False)
+    assert r.status_code == 301
+    assert r.headers["location"] == f"/jobs/{jid}-data-engineer-acme"
+    r = c.get(r.headers["location"])
+    assert r.status_code == 200
+    assert "<h1>Data Engineer</h1>" in r.text
+    assert "Work with Airflow." in r.text
+    assert "<b>pipelines</b>" not in r.text  # escaped, never markup
+    assert '"@type":"JobPosting"' in r.text
+    assert 'rel="canonical" href="http' in r.text
+    assert "unsafe-inline" not in r.headers["content-security-policy"]
+
+
+def test_closed_job_is_gone_and_unknown_is_404(c):
+    from jobmcp import db
+    from jobmcp.orm import Job
+
+    _seed_job()
+    jid = _job_id(c)
+    with db.session() as s:
+        s.get(Job, jid).active = False
+    r = c.get(f"/jobs/{jid}")
+    assert r.status_code == 410 and "noindex" in r.headers["x-robots-tag"]
+    assert c.get("/jobs/999999").status_code == 404
+    assert c.get("/jobs/not-a-job").status_code == 404
+
+
+def test_hostile_job_text_cannot_break_out_of_the_page(c):
+    from jobmcp.services import sync
+
+    sync.sync_board(
+        mk_board(),
+        lambda v, s: [
+            fj(
+                '"><script>alert(1)</script>',
+                url="javascript:alert(1)",
+                desc="</script><script>alert(2)</script>",
+            )
+        ],
+    )
+    jid = _job_id(c)
+    body = c.get(f"/jobs/{jid}", follow_redirects=True).text
+    assert "<script>alert" not in body
+    assert "javascript:alert" not in body  # unsafe apply link is dropped
+    assert "</script><script>" not in body
+
+
+def test_sitemaps_list_open_jobs(c):
+    _seed_job()
+    jid = _job_id(c)
+    idx = c.get("/sitemap.xml").text
+    assert "sitemap-pages.xml" in idx and "sitemap-jobs-1.xml" in idx
+    pages = c.get("/sitemap-pages.xml").text
+    assert "/jobs</loc>" in pages and "/portal" not in pages
+    jobs = c.get("/sitemap-jobs-1.xml")
+    assert jobs.status_code == 200
+    assert f"/jobs/{jid}-data-engineer-acme</loc>" in jobs.text
+    assert c.get("/sitemap-jobs-99.xml").status_code == 404
