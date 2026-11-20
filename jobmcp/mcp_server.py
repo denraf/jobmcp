@@ -175,6 +175,11 @@ def _job(j, full=False) -> dict:
         "workplace": j.workplace,
         "seniority": j.seniority,
         "country": j.country,
+        # what the posting says about visa sponsorship: "offered", "not
+        # offered", or null when it says nothing
+        "visa_sponsorship": {"yes": "offered", "no": "not offered"}.get(
+            j.visa
+        ),
         # pay the posting states (null when it does not), per year in the
         # posting's currency unless salary_period says it was quoted otherwise
         "salary": salary.format_salary(
@@ -256,10 +261,16 @@ def search_jobs(
     exclude_agencies: bool = False,
     sort: str = "relevance",
     salary_band: list[str] | None = None,
+    visa: str | None = None,
 ) -> dict:
     """Search ALL open jobs (not just the user's preference matches) by job
     title and/or any keyword
-    in the title or description. Give `title` and/or `keywords`.
+    in the title or description. Give `title`, `keywords` and/or `company`
+    (a company alone lists its open jobs). The index
+    covers millions of postings: start broad on `title`, then narrow with
+    company (see list_companies), location, country, seniority, workplace and
+    max_age_days rather than piling on keywords. Results are the best matches
+    first (title and company hits outrank the description).
     Syntax: space-separated terms, all required; "quoted phrase"; engineer* =
     prefix; -term = exclude.
     Whole-word, case-insensitive ('go' will not match 'Google').
@@ -272,7 +283,11 @@ def search_jobs(
     75k-100k, 100k-150k, 150k-200k, 200k-plus: approximate USD per year) keeps
     only jobs whose stated pay overlaps a band, and drops jobs that state
     none. Results carry `salary` (e.g. "$120k-150k") when the posting states
-    it. Applied/skipped jobs are hidden unless include_applied=true.
+    it. visa: 'offered' keeps only postings that say they sponsor a visa;
+    'not_excluded' also keeps postings that say nothing, and drops those
+    that rule sponsorship out (every result shows visa_sponsorship). Use it
+    whenever the user needs sponsorship or relocation.
+    Applied/skipped jobs are hidden unless include_applied=true.
     sort: 'relevance' (default) ranks title hits first, newest within each;
     'newest' is strictly by publish date. Results include listed_at (the
     publish date, else when we first saw the job) and a description snippet;
@@ -299,8 +314,9 @@ def search_jobs(
             exclude_agencies=exclude_agencies,
             sort=sort,
             salary=salary_band,
+            visa=visa,
         )
-        return {
+        out = {
             **{k: v for k, v in r.items() if k != "hits"},
             "hits": [
                 {
@@ -312,6 +328,24 @@ def search_jobs(
                 for h in r["hits"]
             ],
         }
+        if out["truncated"] or out["total"] > 200:
+            out["hint"] = (
+                f"{out['total']} matches: too many to page through. Narrow "
+                "with company, location, country, seniority, workplace, "
+                "max_age_days or salary_band, or make the title more "
+                "specific."
+            )
+        return out
+
+
+@tool()
+def list_companies(query: str | None = None, limit: int = 20) -> list[dict]:
+    """Employers with open jobs and how many each has, biggest first. Give
+    `query` (part of a name) to find the exact company name to pass to
+    search_jobs as `company`. Use it before searching a specific employer, and
+    to see who is hiring when the user has no target yet."""
+    with db.session() as s:
+        return search.search_companies(s, query, limit)
 
 
 @tool()

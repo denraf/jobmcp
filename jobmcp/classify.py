@@ -381,3 +381,65 @@ def is_agency(*names: str) -> bool:
         if _AGENCY.search(text):
             return True
     return False
+
+
+# ── visa sponsorship ────────────────────────────────────────────────────
+# Read from the description, where companies say it in a sentence. Only a
+# clear statement sets a label: 'yes' (the posting offers sponsorship or
+# relocation with a visa), 'no' (it rules it out), '' (not stated, or it says
+# both). "No" is tested first and cut out of the text before "yes" is, so
+# "does not offer visa sponsorship" is never read as an offer.
+VISA = ("yes", "no")
+_VISA_NO = re.compile(
+    r"(?<!\w)(?:"
+    r"(?:will|does|do|can|could|is|are|would|may)\s+not\s+(?:be\s+able\s+to\s+)?"
+    r"(?:provide\s+|offer\s+|support\s+|consider\s+)?"
+    r"(?:\w+\s+){0,2}?(?:sponsor\w*|visa)"
+    r"|(?:won't|don't|doesn't|cannot|can't|unable\s+to|not\s+able\s+to)\s+"
+    r"(?:provide\s+|offer\s+|support\s+)?(?:\w+\s+){0,2}?(?:sponsor\w*|visa)"
+    r"|no\s+(?:visa\s+|work\s+permit\s+|immigration\s+)?sponsorship"
+    r"|(?:visa\s+|immigration\s+)?sponsorship\s+(?:is\s+|are\s+)?"
+    r"(?:not\s+(?:available|offered|provided|possible|supported)|unavailable)"
+    r"|without\s+(?:the\s+need\s+for\s+)?(?:current\s+or\s+future\s+)?"
+    r"(?:visa\s+|employer\s+|immigration\s+)?sponsorship"
+    r"|not\s+(?:eligible|open)\s+for\s+(?:visa\s+)?sponsorship"
+    r"|(?:without|not\s+requiring|not\s+require)\s+(?:a\s+)?visa"
+    r"|(?:not\s+require|no\s+need\s+for)\s+(?:\w+\s+){0,3}?sponsorship"
+    r")",
+    re.I,
+)
+_VISA_YES = re.compile(
+    r"(?<!\w)(?:"
+    r"(?:visa|immigration|work\s+permit|work\s+authori[sz]ation)\s+"
+    r"sponsorship\s+(?:is\s+|are\s+)?(?:available|provided|offered|possible|"
+    r"supported|included)"
+    r"|(?:we|will|can|do|does|able\s+to|happy\s+to|open\s+to|willing\s+to)\s+"
+    r"(?:offer\s+|provide\s+|support\s+|consider\s+)?(?:\w+\s+){0,2}?"
+    r"sponsor(?:ing|ship)?\s+(?:your\s+|a\s+|the\s+|an\s+)?"
+    r"(?:\w+\s+){0,2}?(?:visa|work\s+permit|h-?1b|sponsorship)"
+    r"|(?:offers?|provides?|supports?|offering|providing)\s+(?:\w+\s+){0,2}?"
+    r"(?:visa|immigration|work\s+permit)\s+(?:sponsorship|support|assistance)"
+    r"|sponsor(?:s|ing)?\s+(?:your\s+|a\s+|the\s+)?(?:work\s+)?visa"
+    r"|(?:we|will|can)\s+sponsor(?:\s+(?:the|a|an|that|this|suitable|"
+    r"qualified|right|successful)\b|[.,;]|\s*$)"
+    r"|h-?1b\s+(?:sponsorship|transfer)s?"
+    r"|(?:relocation\s+(?:and|&)\s+visa|visa\s+(?:and|&)\s+relocation)"
+    r"|skilled\s+worker\s+(?:visa\s+)?sponsorship"
+    r"|(?:eu\s+)?blue\s+card"
+    r")",
+    re.I,
+)
+
+
+def visa(description: str = "") -> str:
+    """'yes', 'no' or '' (not stated, or both said)."""
+    text = description or ""
+    no = _VISA_NO.search(text)
+    yes = (
+        _VISA_YES.search(_VISA_NO.sub(" ", text))
+        if no
+        else (_VISA_YES.search(text))
+    )
+    if yes and no:
+        return ""
+    return "no" if no else "yes" if yes else ""

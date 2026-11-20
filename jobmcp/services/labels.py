@@ -40,6 +40,19 @@ def countries(v) -> list[str]:
     return out
 
 
+VISA_FILTERS = ("offered", "not_excluded")
+
+
+def visa_mode(v) -> str:
+    v = (v or "").strip().lower().replace("-", "_")
+    if v and v not in VISA_FILTERS:
+        raise ServiceError(
+            "visa must be 'offered' (the posting says it sponsors a visa) or "
+            "'not_excluded' (also postings that say nothing about it)"
+        )
+    return v
+
+
 def salary_bands(v) -> list[str]:
     try:
         return salary.band_keys(_list(v))
@@ -66,6 +79,7 @@ def label_filters(
     country=None,
     exclude_agencies=False,
     salary_band=None,
+    visa=None,
 ) -> list:
     """SQL conditions for the derived labels, shared with preference matching
     so the two always agree."""
@@ -80,6 +94,10 @@ def label_filters(
         f.append(Job.country.in_(countries(country)))
     if exclude_agencies:
         f.append(Board.is_agency == 0)
+    if visa_mode(visa) == "offered":
+        f.append(Job.visa == "yes")
+    elif visa_mode(visa) == "not_excluded":
+        f.append(Job.visa != "no")
     if salary_bands(salary_band):
         f.append(salary_filter(salary_bands(salary_band)))
     return f

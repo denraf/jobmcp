@@ -121,6 +121,7 @@ def job_out(j: Job, full: bool = False) -> dict:
         "workplace": j.workplace,
         "seniority": j.seniority,
         "country": j.country,
+        "visa": j.visa or None,
         "agency": bool(j.board.is_agency),
         # the pay the posting states, when it does: shown next to the location
         "salary": salary.format_salary(
@@ -416,6 +417,7 @@ def search_jobs(
     exclude_agencies: bool = False,
     sort: str = "relevance",
     salary: str | None = None,
+    visa: str | None = None,
 ):
     """Search all open jobs by title and/or keywords in title+description. See
     services/search.py for syntax. `seniority`, `country` and `salary` take
@@ -440,6 +442,7 @@ def search_jobs(
         exclude_agencies=exclude_agencies,
         sort=sort,
         salary=salary,
+        visa=visa,
     )
     return {**r, "hits": [hit_out(h) for h in r["hits"]]}
 
@@ -578,6 +581,7 @@ def public_jobs(
     exclude_agencies: bool = False,
     sort: str = "newest",
     salary: str | None = None,
+    visa: str | None = None,
 ):
     def compute():
         r = search.search_jobs(
@@ -601,6 +605,7 @@ def public_jobs(
             exclude_agencies=exclude_agencies,
             sort=sort,
             salary=salary,
+            visa=visa,
         )
         return {**r, "hits": [hit_out(h) for h in r["hits"]]}
 
@@ -623,6 +628,7 @@ def public_jobs(
         exclude_agencies,
         sort,
         salary,
+        visa,
     )
     out = cache.public.get_or_compute(key, compute, cache.ttl())
     if cache.ttl() > 0:

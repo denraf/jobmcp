@@ -165,6 +165,9 @@ async function preferences() {
     return { v, cb, el: h('label', { class: 'check' }, cb, label) };
   });
   const agency = h('input', { type: 'checkbox', id: 'p-agency' }); agency.checked = !!p.exclude_agencies;
+  const visa = h('select', { class: 'select', id: 'p-visa' },
+    ...[['', 'No preference'], ['not_excluded', 'Skip jobs that rule sponsorship out'], ['offered', 'Only jobs that offer sponsorship']].map(([v, t]) => h('option', { value: v, text: t })));
+  visa.value = p.visa || '';
   const cap = h('input', { class: 'input', type: 'number', id: 'p-cap', min: '0', max: '500', value: String(p.max_applications_per_day) });
   const vendorChecks = cfg.vendors.map((v) => {
     const cb = h('input', { type: 'checkbox', value: v }); cb.checked = p.vendors.includes(v);
@@ -183,7 +186,9 @@ async function preferences() {
         h('p', { class: 'hint', text: 'Worked out from the job title. Leave all unticked for any level.' })),
       f.countries.el,
       h('div', { class: 'field' }, h('label', { class: 'check' }, agency, 'Skip staffing and recruiting agencies'),
-        h('p', { class: 'hint', text: 'Hides postings from companies that look like agencies rather than the employer.' }))),
+        h('p', { class: 'hint', text: 'Hides postings from companies that look like agencies rather than the employer.' })),
+      h('div', { class: 'field' }, h('label', { for: 'p-visa', text: 'Visa sponsorship' }), visa,
+        h('p', { class: 'hint', text: 'Read from the job description, where companies state it. A job that says nothing is kept unless you choose “Only jobs that offer sponsorship”.' }))),
     h('section', { class: 'block' }, h('h2', { text: 'Narrow it down' }), h('div', { class: 'two' }, f.companies_include.el, f.companies_exclude.el),
       f.description_exclude.el,
       h('div', { class: 'two' }, h('div', { class: 'field' }, h('label', { for: 'p-age', text: 'Posted' }), age),
@@ -202,7 +207,7 @@ async function preferences() {
         title_include: f.title_include.get(), title_exclude: f.title_exclude.get(), locations: f.locations.get(),
         companies_include: f.companies_include.get(), companies_exclude: f.companies_exclude.get(),
         description_exclude: f.description_exclude.get(), remote_only: remote.checked,
-        seniority: tierChecks.filter((x) => x.cb.checked).map((x) => x.v), countries: f.countries.get(), exclude_agencies: agency.checked,
+        seniority: tierChecks.filter((x) => x.cb.checked).map((x) => x.v), countries: f.countries.get(), exclude_agencies: agency.checked, visa: visa.value,
         max_age_days: age.value ? Number(age.value) : null, max_applications_per_day: capN,
         vendors: vendorChecks.filter((x) => x.cb.checked).map((x) => x.v),
       } });

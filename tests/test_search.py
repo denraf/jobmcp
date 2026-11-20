@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from jobmcp import db
 from jobmcp.orm import Job
@@ -189,3 +189,131 @@ def test_pagination(uid):
     assert r["total"] >= 4 and len(titles) == 2 and r["next_offset"] == 2
     t2, r2 = S(uid, title="engineer*", limit=2, offset=2)
     assert not set(titles) & set(t2)
+
+
+# ── full-text narrowing ──
+def _fts_seed():
+    sync.sync_board(
+        mk_board(),
+        lambda v, s: [
+            fj("Data Engineer", company="Acme Robotics", desc="airflow"),
+            fj("Chef", company="Acme Robotics", desc="we love data engineer"),
+            fj("Go Developer", company="Globex", desc="Go and Kubernetes"),
+            fj("Designer", company="Initech", desc="figma"),
+        ],
+    )
+
+
+def test_ft_terms_are_safe_and_skip_what_the_index_cannot_hold():
+    from jobmcp.services.search import ft_query, ft_term
+
+    assert ft_term("engineer*") == "engineer*"
+    assert ft_term("machine learning") == '"machine learning"'
+    assert ft_term("go") is None and ft_term("the") is None
+    assert ft_term("c++") is None
+    assert ft_term('x") +(evil') is None  # no operator can get through
+    assert ft_query(["go", "airflow"]) == "+airflow"
+    assert ft_query(["go", "airflow"], any_term=True) is None
+    assert ft_query(["airflow", "spark"], any_term=True) == "airflow spark"
+
+
+def test_search_by_company_and_short_terms():
+
+    _fts_seed()
+    with db.session() as s:
+        r = search.search_jobs(s, None, company="acme")
+        assert {h.job.title for h in r["hits"]} == {"Data Engineer", "Chef"}
+        r = search.search_jobs(s, None, title="go")  # too short for the index
+        assert [h.job.title for h in r["hits"]] == ["Go Developer"]
+        r = search.search_jobs(s, None, keywords="go kubernetes")
+        assert [h.job.title for h in r["hits"]] == ["Go Developer"]
+
+
+def test_title_hits_outrank_description_hits():
+
+    _fts_seed()
+    with db.session() as s:
+        r = search.search_jobs(s, None, keywords="data engineer")
+        assert [h.job.title for h in r["hits"]] == ["Data Engineer", "Chef"]
+        assert [h.in_title for h in r["hits"]] == [True, False]
+
+
+def test_company_directory():
+
+    _fts_seed()
+    with db.session() as s:
+        s.execute(text("UPDATE boards SET job_count = 4"))
+        s.execute(text("UPDATE boards SET company_name = 'Acme Robotics'"))
+    with db.session() as s:
+        assert search.search_companies(s, "acme") == [
+            {"company": "Acme Robotics", "open_jobs": 4}
+        ]
+        assert search.search_companies(s, "zzz") == []
+
+
+def test_schema_has_the_fulltext_indexes():
+    from jobmcp import migrations
+
+    assert migrations.is_current()
+    assert migrations.ensure_schema() == []  # nothing left to build
+
+
+# ── visa sponsorship ──
+def test_visa_is_read_from_the_description():
+    from jobmcp import classify
+
+    assert classify.visa("We offer visa sponsorship for this role.") == "yes"
+    assert classify.visa("H-1B transfers welcome") == "yes"
+    assert classify.visa("We do not offer visa sponsorship.") == "no"
+    assert (
+        classify.visa("Must be authorized to work without sponsorship") == "no"
+    )
+    assert classify.visa("Sponsorship is not available") == "no"
+    assert classify.visa("Great team, remote first.") == ""
+    assert classify.visa("") == ""
+
+
+def _visa_seed():
+    sync.sync_board(
+        mk_board(),
+        lambda v, s: [
+            fj("Backend Dev", desc="Visa sponsorship is available."),
+            fj("Frontend Dev", desc="We are unable to sponsor visas."),
+            fj("Data Dev", desc="Join our team."),
+        ],
+    )
+
+
+def test_visa_filter():
+    _visa_seed()
+    with db.session() as s:
+
+        def titles(v):
+            r = search.search_jobs(s, None, title="dev", visa=v)
+            return {h.job.title for h in r["hits"]}
+
+        assert titles("offered") == {"Backend Dev"}
+        assert titles("not_excluded") == {"Backend Dev", "Data Dev"}
+        assert len(titles(None)) == 3
+        with pytest.raises(ServiceError):
+            titles("maybe")
+
+
+def test_visa_preference_and_agent_output():
+    from jobmcp import mcp_server
+    from jobmcp.services import matching, prefs
+    from jobmcp.orm import User
+
+    uid = mk_user()
+    _visa_seed()
+    with db.session() as s:
+        u = s.get(User, uid)
+        p = prefs.update_preferences(
+            s, u, {"title_include": ["dev"], "visa": "offered"}
+        )
+        assert prefs.prefs_dict(p)["visa"] == "offered"
+        jobs, _ = matching.find_matches(s, uid, p, 10, None)
+        assert [j.title for j in jobs] == ["Backend Dev"]
+        assert mcp_server._job(jobs[0])["visa_sponsorship"] == "offered"
+        with pytest.raises(ServiceError):
+            prefs.update_preferences(s, u, {"visa": "x"})

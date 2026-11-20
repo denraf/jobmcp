@@ -6,21 +6,28 @@ Query syntax (`keywords` / `title`): space-separated terms, all required;
   -intern              exclude (whole word)
 Matching is whole-word and case-insensitive, so 'go' does not match 'Google'.
 
-Like preference matching this is two-stage: SQL substring filters narrow the
-candidates (newest
-first, at most CANDIDATE_CAP), then Python applies the whole-word rules and
-ranks title hits above
-description-only hits. `truncated` in the result says the cap was hit, i.e. add
-filters or terms.
+Like preference matching this is two-stage: SQL narrows the candidates (at
+most CANDIDATE_CAP), then Python applies the whole-word rules and ranks title
+hits above description-only hits. `truncated` in the result says the cap was
+hit, i.e. add filters or terms.
+
+The narrowing is driven by MySQL FULLTEXT indexes (see orm.Job), so a query
+over millions of postings reads only the rows that contain the words, and the
+candidates are the BEST-scoring ones (title and company weighted above the
+description), not merely the newest. A term the index cannot hold (under 3
+characters such as 'go' or 'c', or a stop word) is checked with a substring
+filter instead, exactly as before.
 """
 
 from __future__ import annotations
 
+import re
 import shlex
 from dataclasses import dataclass
 from datetime import timedelta
 
 from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy.dialects.mysql import match
 from sqlalchemy.orm import Session, defer, joinedload
 
 from ..models import strip_data_uris
@@ -56,6 +63,53 @@ def parse_query(q: str | None) -> tuple[list[str], list[str]]:
 
 def _sub(term: str) -> str:
     return term.rstrip("*")
+
+
+# InnoDB ignores words shorter than innodb_ft_min_token_size (3) and its
+# built-in stop words, so a boolean query that requires one matches nothing.
+FT_MIN_TOKEN = 3
+FT_STOPWORDS = frozenset(
+    "a about an are as at be by com de en for from how i in is it la of on or "
+    "that the this to was what when where who will with und the www".split()
+)
+_WORD = re.compile(r"\w+")
+
+
+def ft_term(term: str) -> str | None:
+    """One search term as a boolean-mode fragment, or None when the index
+    cannot answer it. Only word characters ever reach the query, so a term
+    can never inject an operator."""
+    words = _WORD.findall(_sub(term))
+    if not words or any(
+        len(w) < FT_MIN_TOKEN or w.lower() in FT_STOPWORDS for w in words
+    ):
+        return None
+    if len(words) == 1:
+        return words[0] + ("*" if term.endswith("*") else "")
+    if term.endswith("*"):  # a phrase cannot be a prefix: all its words
+        return " ".join(f"+{w}" for w in words[:-1]) + f" +{words[-1]}*"
+    return '"' + " ".join(words) + '"'
+
+
+def ft_query(terms: list[str], any_term: bool = False) -> str | None:
+    """Boolean-mode expression that narrows to rows containing the terms, or
+    None for no narrowing. It only ever narrows: the whole-word check that
+    follows decides. For 'all', the terms the index can hold are required and
+    the rest are left to that check; for 'any', one unusable term means the
+    index cannot narrow at all."""
+    frags = [ft_term(t) for t in terms]
+    if any_term:
+        if not frags or None in frags:
+            return None
+        return " ".join(f.replace("+", "") for f in frags if f)
+    usable = [f for f in frags if f]
+    if not usable:
+        return None
+    return " ".join(f if f.startswith("+") else "+" + f for f in usable)
+
+
+def _against(expr: str, *cols):
+    return match(*cols, against=expr, in_boolean_mode=True)
 
 
 @dataclass
@@ -103,6 +157,7 @@ def search_jobs(
     exclude_agencies: bool = False,
     sort: str = "relevance",
     salary=None,
+    visa=None,
 ) -> dict:
     """`user_id=None` is an anonymous search: no ledger, so nothing is hidden
     and no status is shown.
@@ -124,11 +179,21 @@ def search_jobs(
         )
     t_req, t_neg = parse_query(title)
     k_req, k_neg = parse_query(keywords)
-    if not (t_req or k_req) and not browse:
-        raise ServiceError("give a title and/or keywords to search for")
+    if not (t_req or k_req or (company and company.strip())) and not browse:
+        raise ServiceError(
+            "give a title, keywords and/or a company to search for"
+        )
     limit = min(max(limit, 1), 50)
 
     f = [Job.active == 1, Board.status == "enabled"]
+    # Narrowing by the full-text indexes comes first so MySQL starts from
+    # them; the substring filters after it keep the exact semantics.
+    title_ft = ft_query(t_req)
+    text_ft = ft_query(k_req, match == "any")
+    if title_ft:
+        f.append(_against(title_ft, Job.title, Job.company))
+    if text_ft:
+        f.append(_against(text_ft, Job.title, Job.company, Job.description))
     for t in t_req:
         f.append(Job.title.contains(_sub(t), autoescape=True))
     if k_req:
@@ -146,12 +211,20 @@ def search_jobs(
         workplace = "remote"
     f.extend(
         label_filters(
-            workplace, seniority, country, exclude_agencies, salary_band=salary
+            workplace,
+            seniority,
+            country,
+            exclude_agencies,
+            salary_band=salary,
+            visa=visa,
         )
     )
     if vendor:
         f.append(Job.vendor == vendor)
     if company:
+        c_ft = ft_query([company.strip()])
+        if c_ft:
+            f.append(_against(c_ft, Job.company))
         f.append(Job.company.contains(company, autoescape=True))
     if max_age_days:
         cutoff = utcnow() - timedelta(days=max_age_days)
@@ -206,12 +279,26 @@ def search_jobs(
             "hits": page,
         }
 
+    # The best-scoring candidates, not just the newest: a title or company
+    # hit counts three times a mention in the description.
+    order = [Job.sort_at.desc(), Job.id.desc()]
+    ranked = [
+        _against(e, *cols) * w
+        for e, cols, w in (
+            (title_ft, (Job.title, Job.company), 3),
+            (text_ft, (Job.title, Job.company, Job.description), 1),
+        )
+        if e
+    ]
+    if ranked:
+        score = ranked[0] if len(ranked) == 1 else ranked[0] + ranked[1]
+        order.insert(0, score.desc())
     rows = list(
         s.scalars(
             select(Job)
             .join(Board, Board.id == Job.board_id)
             .where(*f)
-            .order_by(Job.sort_at.desc(), Job.id.desc())
+            .order_by(*order)
             .limit(CANDIDATE_CAP)
         )
     )
@@ -262,3 +349,29 @@ def search_jobs(
         "truncated": truncated,
         "hits": page,
     }
+
+
+def search_companies(
+    s: Session, query: str | None = None, limit: int = 20
+) -> list[dict]:
+    """Employers that have open jobs, biggest first: how an agent finds the
+    exact name to pass as `company` (or sees who hires most). The boards table
+    is one row per employer, so this never touches the jobs."""
+    limit = min(max(limit, 1), 100)
+    q = select(
+        Board.company_name, func.sum(Board.job_count).label("open_jobs")
+    ).where(
+        Board.status == "enabled",
+        Board.job_count > 0,
+        Board.company_name != "",
+    )
+    if query and query.strip():
+        q = q.where(
+            Board.company_name.contains(query.strip(), autoescape=True)
+        )
+    rows = s.execute(
+        q.group_by(Board.company_name)
+        .order_by(func.sum(Board.job_count).desc(), Board.company_name)
+        .limit(limit)
+    ).all()
+    return [{"company": n, "open_jobs": int(c)} for n, c in rows]

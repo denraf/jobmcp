@@ -31,6 +31,7 @@
 
   <form class="filters" id="filters" role="search" autocomplete="off">
     <div class="field f-title"><label for="f-title">Job title</label><input class="input" id="f-title" name="title" placeholder="data engineer*" type="search"></div>
+    <div class="field f-company"><label for="f-company">Company</label><input class="input" id="f-company" name="company" placeholder="Acme" type="search"></div>
     <div class="field f-kw"><label for="f-kw">Keywords in the description</label><input class="input" id="f-kw" name="keywords" placeholder='airflow "machine learning" -intern' type="search"></div>
     <div class="field f-loc"><label for="f-loc">Location</label><input class="input" id="f-loc" name="location" placeholder="Berlin" type="search"></div>
     <div class="field f-vendor"><label for="f-vendor">Hiring platform</label><select class="select" id="f-vendor" name="vendor"><option value="">Any</option></select></div>
@@ -42,6 +43,8 @@
       <select class="select" id="f-country" name="country"><option value="">Anywhere</option></select></div>
     <div class="field f-salary"><label for="f-salary">Salary (a year, approx. in USD)</label>
       <select class="select" id="f-salary" name="salary"><option value="">Any</option><option value="under-50k">Under 50k</option><option value="50k-75k">50k to 75k</option><option value="75k-100k">75k to 100k</option><option value="100k-150k">100k to 150k</option><option value="150k-200k">150k to 200k</option><option value="200k-plus">200k and over</option></select></div>
+    <div class="field f-visa"><label for="f-visa">Visa sponsorship</label>
+      <select class="select" id="f-visa" name="visa"><option value="">Any</option><option value="offered">Offered in the posting</option><option value="not_excluded">Not ruled out</option></select></div>
     <div class="field f-remote"><label class="check"><input type="checkbox" id="f-remote" name="remote"> Remote</label>
       <label class="check"><input type="checkbox" id="f-agency" name="noagency"> Hide staffing agencies</label></div>
     <p class="hint span-all">Salary shows only for jobs that state their pay. Use quotes for a phrase, <code>*</code> after a word to match its endings (engineer* finds engineering), and <code>-</code> to leave a word out.</p>

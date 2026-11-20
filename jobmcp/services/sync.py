@@ -303,6 +303,7 @@ def _apply_jobs(
             row.country = classify.country(f.location)
             if f.description:  # keep the stored one if this fetch had none
                 row.description = fit(f.description)
+                row.visa = classify.visa(strip_data_uris(f.description))
                 for col, val in salary.columns(
                     strip_data_uris(f.description)
                 ).items():
@@ -323,6 +324,7 @@ def _apply_jobs(
                 seniority=classify.seniority(f.title),
                 country=classify.country(f.location),
                 **salary.columns(strip_data_uris(f.description)),
+                visa=classify.visa(strip_data_uris(f.description)),
                 description=fit(f.description),
                 first_seen=now,
                 last_seen=now,

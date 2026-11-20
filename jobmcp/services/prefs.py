@@ -39,6 +39,7 @@ def prefs_dict(p: Preferences) -> dict:
         seniority=list(p.seniority or []),
         countries=list(p.countries or []),
         exclude_agencies=bool(p.exclude_agencies),
+        visa=p.visa or "",
         remote_only=p.remote_only,
         max_age_days=p.max_age_days,
         max_applications_per_day=p.max_applications_per_day,
@@ -69,6 +70,8 @@ def update_preferences(s: Session, user: User, data: dict) -> Preferences:
             p.remote_only = bool(v)
         elif k == "exclude_agencies":
             p.exclude_agencies = bool(v)
+        elif k == "visa":
+            p.visa = labels.visa_mode(v)
         elif k == "seniority":
             p.seniority = labels.tiers(_strings(v, k))
         elif k == "countries":

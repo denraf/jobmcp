@@ -34,6 +34,10 @@ def is_current() -> bool:
         and "sort_at" in {c["name"] for c in insp.get_columns("jobs")}
         and {c for c, _ in SALARY_COLUMNS}
         <= {c["name"] for c in insp.get_columns("jobs")}
+        and "visa" in {c["name"] for c in insp.get_columns("jobs")}
+        and "visa" in {c["name"] for c in insp.get_columns("preferences")}
+        and set(FULLTEXT_INDEXES)
+        <= {i["name"] for i in insp.get_indexes("jobs")}
         and {"seniority", "countries", "exclude_agencies"}
         <= {c["name"] for c in insp.get_columns("preferences")}
     )
@@ -108,7 +112,9 @@ def ensure_schema() -> list[str]:
     changed += _classification_columns(eng)
     changed += _sort_column(eng)
     changed += _salary_columns(eng)
+    changed += _visa_column(eng)
     changed += _filter_indexes(eng)
+    changed += _fulltext_indexes(eng)
     for name in changed:
         log.info("applied: %s", name)
     return changed
@@ -218,7 +224,67 @@ def backfill_job_salaries(eng, batch: int = 500) -> int:
         last = rows[-1].id
 
 
+def _visa_column(eng) -> list[str]:
+    """jobs.visa, read from each description, and preferences.visa. Existing
+    postings are read once, in batches; syncs refresh it too."""
+    changed = []
+    if "visa" not in {
+        c["name"] for c in inspect(eng).get_columns("preferences")
+    }:
+        with eng.begin() as c:
+            c.execute(
+                text(
+                    "ALTER TABLE preferences ADD COLUMN visa VARCHAR(12) "
+                    "NOT NULL DEFAULT ''"
+                )
+            )
+        changed.append("preferences.visa")
+    if "visa" in {c["name"] for c in inspect(eng).get_columns("jobs")}:
+        return changed
+    with eng.begin() as c:
+        c.execute(
+            text(
+                "ALTER TABLE jobs ADD COLUMN visa VARCHAR(3) "
+                "NOT NULL DEFAULT ''"
+            )
+        )
+    n = backfill_job_visa(eng)
+    return changed + [f"jobs.visa ({n} postings state a visa position)"]
+
+
+def backfill_job_visa(eng, batch: int = 500) -> int:
+    """Read the visa position out of every posting's text, `batch` rows at a
+    time. Returns how many postings state one."""
+    from . import classify
+    from .models import strip_data_uris
+
+    found, last = 0, 0
+    while True:
+        with eng.begin() as c:
+            rows = c.execute(
+                text(
+                    "SELECT id, description FROM jobs WHERE id > :last "
+                    "ORDER BY id LIMIT :n"
+                ),
+                {"last": last, "n": batch},
+            ).all()
+            if not rows:
+                return found
+            params = [
+                {"id": r.id, "v": v}
+                for r in rows
+                if (v := classify.visa(strip_data_uris(r.description or "")))
+            ]
+            if params:
+                c.execute(
+                    text("UPDATE jobs SET visa = :v WHERE id = :id"), params
+                )
+                found += len(params)
+        last = rows[-1].id
+
+
 FILTER_INDEXES = {
+    "ix_jobs_active_visa": "active, visa, board_id",
     "ix_jobs_active_workplace": "active, workplace, board_id",
     "ix_jobs_active_seniority": "active, seniority, board_id",
     "ix_jobs_active_country": "active, country, board_id",
@@ -249,6 +315,28 @@ def _filter_indexes(eng) -> list[str]:
             if name in have:  # an older definition: it lacks a column
                 c.execute(text(f"DROP INDEX {name} ON jobs"))
             c.execute(text(f"CREATE INDEX {name} ON jobs ({cols})"))
+        made.append(name)
+    return [f"index {n}" for n in made]
+
+
+FULLTEXT_INDEXES = {
+    "ft_jobs_title": "title, company",
+    "ft_jobs_company": "company",
+    "ft_jobs_text": "title, company, description",
+}
+
+
+def _fulltext_indexes(eng) -> list[str]:
+    """The word-search indexes. Building one reads every posting, so on a big
+    table this takes minutes (the description one the longest); it runs once.
+    """
+    have = {i["name"] for i in inspect(eng).get_indexes("jobs")}
+    made = []
+    for name, cols in FULLTEXT_INDEXES.items():
+        if name in have:
+            continue
+        with eng.begin() as c:
+            c.execute(text(f"CREATE FULLTEXT INDEX {name} ON jobs ({cols})"))
         made.append(name)
     return [f"index {n}" for n in made]
 

@@ -515,7 +515,7 @@ def test_stored_whole_served_to_the_site_but_not_to_agents_or_search():
             "A" * 5000, "A" * 100 + "zebra" + "A" * 100
         )
         j.description = junk
-        s.flush()
+        s.commit()  # the full-text index only sees committed rows
         hit = search.search_jobs(s, None, keywords="zebra")
         assert hit["total"] == 0
         hit = search.search_jobs(s, None, keywords="python")

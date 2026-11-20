@@ -141,6 +141,11 @@ class Preferences(Base):
     exclude_agencies: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("0")
     )
+    # 'offered' = only jobs that say they sponsor a visa; 'not_excluded' =
+    # also jobs that are silent about it; '' = no preference
+    visa: Mapped[str] = mapped_column(
+        String(12), default="", server_default=""
+    )
     max_applications_per_day: Mapped[int] = mapped_column(Integer, default=20)
     user: Mapped[User] = relationship(back_populates="preferences")
 
@@ -231,6 +236,9 @@ class Job(Base):
     salary_period: Mapped[str] = mapped_column(
         String(5), default="", server_default=""
     )
+    # Visa sponsorship as the description states it (classify.visa): 'yes'
+    # offers it, 'no' rules it out, '' = not stated.
+    visa: Mapped[str] = mapped_column(String(3), default="", server_default="")
     salary_usd_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     salary_usd_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     first_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -247,11 +255,25 @@ class Job(Base):
         Index("ix_jobs_board_active", "board_id", "active"),
         Index("ix_jobs_active_posted", "active", "posted_at"),
         Index("ix_jobs_active_sort", "active", "sort_at", "id"),
+        # Word search over millions of postings (services/search.py). Three
+        # indexes because MATCH must name exactly the columns of one index:
+        # title+company (weighted up when ranking), company alone (the
+        # company filter) and title+company+description (keywords).
+        Index("ft_jobs_title", "title", "company", mysql_prefix="FULLTEXT"),
+        Index("ft_jobs_company", "company", mysql_prefix="FULLTEXT"),
+        Index(
+            "ft_jobs_text",
+            "title",
+            "company",
+            "description",
+            mysql_prefix="FULLTEXT",
+        ),
         # Cover the jobs-page filters and their counts: MySQL answers from
         # the index and never reads the (large) description rows.
         Index("ix_jobs_active_workplace", "active", "workplace", "board_id"),
         Index("ix_jobs_active_seniority", "active", "seniority", "board_id"),
         Index("ix_jobs_active_country", "active", "country", "board_id"),
+        Index("ix_jobs_active_visa", "active", "visa", "board_id"),
         Index(
             "ix_jobs_active_salary",
             "active",

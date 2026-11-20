@@ -82,6 +82,7 @@ def _sql_filters(p: Preferences, user_id: int):
             p.seniority or [],
             p.countries or [],
             bool(p.exclude_agencies),
+            visa=p.visa or None,
         )
     )
     if p.vendors:
