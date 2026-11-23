@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
+import threading
 from datetime import date, timedelta
 
-from .. import http
+from .. import config, http
 from ..models import Job
 from .base import SoftBlocked, Vendor, valid_slug
 
@@ -22,6 +23,26 @@ MAX_PER_BOARD = (
     400  # tenants can hold thousands; warn rather than silently truncate
 )
 PAGE = 20
+
+# Workday answers 429 when one address asks too fast, and it counts per pod
+# (wd1, wd3, ...), not per tenant: the sync threads, each on a different
+# employer, add up. So every request to a pod waits its turn at a shared gate,
+# and when the pod says 429 all the threads pause together (honoring
+# Retry-After) instead of each retrying on its own timer.
+_gates: dict[str, http.Gate] = {}
+_gates_lock = threading.Lock()
+
+
+def gate_for(pod: str) -> http.Gate:
+    with _gates_lock:
+        if pod not in _gates:
+            _gates[pod] = http.Gate(
+                f"Workday {pod}",
+                min_interval=config.WORKDAY_MIN_INTERVAL,
+                max_cooldown=120.0,
+                trip_after=8,  # blocked, not busy: stop and retry next sync
+            )
+        return _gates[pod]
 
 
 class Workday(Vendor):
@@ -80,6 +101,7 @@ class Workday(Vendor):
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                 },
+                gate=gate_for(pod),
             )
             r.raise_for_status()
             data = r.json()

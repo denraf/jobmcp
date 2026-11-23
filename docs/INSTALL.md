@@ -566,6 +566,7 @@ All variables are optional except the database URL, the public base URL and (wit
 | `JOBMCP_TASK_STALE_MIN` | `5` | Minutes without a sign of life after which a running task is treated as dead (its worker was killed) and marked failed, so it can be asked for again |
 | `JOBMCP_CANARY_BOARDS` | empty | Extra boards for the daily platform check: `vendor:board,vendor:board` |
 | `JOBMCP_SYNC_WORKERS` | `16` | Boards fetched in parallel by one sync run (thread pool) |
+| `JOBMCP_WORKDAY_INTERVAL` | `0.7` | Seconds between requests to one Workday pod (`wd1`, `wd3`, ...), shared by every employer on it. Raise it if Workday syncs fail with HTTP 429 |
 | `JOBMCP_SYNC_AFTER_REFRESH` | `1` | Start syncing new boards as soon as a Common Crawl refresh ends |
 | `JOBMCP_GONE_DISABLE_AFTER` | `3` | Consecutive 404s before a board is disabled |
 | `JOBMCP_CACHE_SECONDS` | `30` | How long the public jobs list is reused (server memory, and `Cache-Control` for browsers and proxies). `0` turns it off |

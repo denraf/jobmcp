@@ -42,6 +42,9 @@ TASK_SLOTS = int(os.environ.get("JOBMCP_TASK_SLOTS", "3"))
 TASK_STALE_MIN = int(os.environ.get("JOBMCP_TASK_STALE_MIN", "5"))
 # Boards fetched in parallel by one sync run (a thread pool; the work is
 # network-bound).
+# Seconds between requests to one Workday pod (all employers on wd1 share
+# it): Workday answers 429 to anything faster from one address.
+WORKDAY_MIN_INTERVAL = float(os.environ.get("JOBMCP_WORKDAY_INTERVAL", "0.7"))
 SYNC_WORKERS = int(os.environ.get("JOBMCP_SYNC_WORKERS", "16"))
 # Start syncing newly discovered boards as soon as a Common Crawl refresh
 # finishes, instead of at the next hourly run.
