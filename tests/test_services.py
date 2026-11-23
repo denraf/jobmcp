@@ -466,3 +466,41 @@ def test_change_password_and_delete_account():
         for m in (Application, ApiToken, SavedJob, Preferences):
             assert s.scalar(select(m).where(m.user_id == uid)) is None
         assert saved.saved_ids(s, keep) == [j1]  # other users untouched
+
+
+def test_a_posting_already_stored_by_another_board_does_not_fail_the_sync():
+    """uid is unique across boards. The same company listed under two slugs
+    produces the same posting twice; the second board must skip it, not die
+    with a duplicate-key error."""
+    from sqlalchemy import func, select
+
+    from jobmcp import db
+    from jobmcp.orm import Job
+    from jobmcp.services import sync
+
+    a, b = mk_board("workable", "area17"), mk_board("workable", "area-17")
+    same = lambda v, s: [fj("Head of BD", board="area17", vendor="workable")]  # noqa: E731
+    assert sync.sync_board(a, same)["ok"]
+    r = sync.sync_board(b, same)
+    assert r["ok"] and r["new"] == 0
+    with db.session() as s:
+        assert s.scalar(select(func.count()).select_from(Job)) == 1
+
+
+def test_one_crashing_board_does_not_end_the_whole_run(monkeypatch):
+    from jobmcp.services import sync
+
+    a, b = mk_board("greenhouse", "a"), mk_board("greenhouse", "b")
+    real = sync.sync_board
+
+    def boom(i, fetcher=None):
+        if i == a:
+            raise RuntimeError("disk on fire")
+        return real(i, fetcher)
+
+    monkeypatch.setattr(sync, "sync_board", boom)
+    res = sync.sync_many([a, b], 2, lambda v, s: [fj("X", board=s)])
+    assert [r["ok"] for r in sorted(res, key=lambda r: r["board_id"])] == [
+        False,
+        True,
+    ]

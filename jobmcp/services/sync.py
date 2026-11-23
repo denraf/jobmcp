@@ -282,10 +282,37 @@ def _apply_jobs(
     }
     new = 0
     pending: list[Job] = []
+    fresh: list[Job] = []  # new rows, added only once checked in flush()
 
     def flush() -> None:
         # Write what we have and let go of it: a board with thousands of
         # postings is stored in slices, not held whole.
+        nonlocal new
+        if fresh:
+            # uid is unique across ALL boards, but `existing` holds only this
+            # one's. Two boards can describe the same posting (the same
+            # company listed under two slugs), and a concurrent sync of this
+            # board may have stored it a moment ago. Whoever has it first
+            # keeps it; inserting again would fail the whole sync.
+            taken = set(
+                s.scalars(
+                    select(Job.uid).where(Job.uid.in_([r.uid for r in fresh]))
+                )
+            )
+            for r in fresh:
+                if r.uid in taken:
+                    new -= 1
+                    log.debug(
+                        "posting %s of %s/%s is already stored by another "
+                        "board",
+                        r.uid,
+                        b.vendor,
+                        b.board,
+                    )
+                else:
+                    s.add(r)
+                    pending.append(r)
+            fresh.clear()
         s.flush()
         for row in pending:
             s.expunge(row)
@@ -329,8 +356,11 @@ def _apply_jobs(
                 first_seen=now,
                 last_seen=now,
             )
-            s.add(row)
+            fresh.append(row)
             new += 1
+            if len(fresh) + len(pending) >= FLUSH_EVERY:
+                flush()
+            continue
         pending.append(row)
         if len(pending) >= FLUSH_EVERY:
             flush()
@@ -363,9 +393,22 @@ def sync_many(
 
     def one(i: int) -> dict:
         jobs = known.pop(i, None)  # let go of them as soon as they are stored
-        return sync_board(
-            i, (lambda v, b: jobs) if jobs is not None else fetcher
-        )
+        try:
+            return sync_board(
+                i, (lambda v, b: jobs) if jobs is not None else fetcher
+            )
+        except Exception as e:
+            # One board that cannot be stored must not end the run for the
+            # thousands of others waiting behind it.
+            log.exception("sync of board %s crashed", i)
+            return {
+                "board_id": i,
+                "ok": False,
+                "error": f"{type(e).__name__}: {e}"[:500],
+                "jobs": 0,
+                "new": 0,
+                "closed": 0,
+            }
 
     def go() -> list[dict]:
         pool = max(1, min(workers, len(ids)))
