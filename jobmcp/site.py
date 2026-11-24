@@ -21,7 +21,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
-from . import config, db, logs, mcp_server, metrics, seo
+from . import config, db, install, logs, mcp_server, metrics, oauth, seo
 from .api import app as api_app
 
 # Minimal OS images (python:slim) have no MIME table entry for web fonts;
@@ -39,6 +39,7 @@ PAGES = {
     "/verify": "verify.html",
     "/forgot": "forgot.html",
     "/reset": "reset.html",
+    "/oauth/authorize": "authorize.html",
 }
 
 # Everything is same-origin and script/style are external files, so no
@@ -174,10 +175,15 @@ def _page(name: str):
         # __BASE__ is the public address, so canonical and share URLs are
         # absolute and follow JOBMCP_PUBLIC_BASE_URL.
         text = (WEB / name).read_text(encoding="utf-8")
-        return Response(
-            text.replace("__BASE__", config.PUBLIC_BASE_URL),
-            media_type="text/html",
-        )
+        text = text.replace("__BASE__", config.PUBLIC_BASE_URL)
+        if "__MCP__" in text:
+            ln = install.links(config.PUBLIC_MCP_URL)
+            text = (
+                text.replace("__MCP__", config.PUBLIC_MCP_URL)
+                .replace("__CURSOR__", ln["cursor"])
+                .replace("__VSCODE__", ln["vscode"])
+            )
+        return Response(text, media_type="text/html")
 
     return handler
 
@@ -189,6 +195,7 @@ for path, name in PAGES.items():
 
 
 app.include_router(seo.router)
+app.include_router(oauth.router)
 
 
 @app.get("/healthz", include_in_schema=False)

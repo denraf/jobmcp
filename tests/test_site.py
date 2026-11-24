@@ -270,3 +270,39 @@ def test_sitemaps_list_open_jobs(c):
     assert jobs.status_code == 200
     assert f"/jobs/{jid}-data-engineer-acme</loc>" in jobs.text
     assert c.get("/sitemap-jobs-99.xml").status_code == 404
+
+
+def test_homepage_tells_agents_how_to_connect_without_an_account():
+    c = TestClient(app)
+    t = c.get("/").text
+    assert "claude mcp add --transport http jobmcp" in t
+    assert "/mcp/" in t and "__BASE__" not in t
+    assert "Do I need an account before I connect my agent?" in t
+
+
+def test_one_click_install_links():
+    import base64
+    import json
+    from urllib.parse import parse_qs, unquote, urlsplit
+
+    from jobmcp import config
+
+    c = TestClient(app)
+    t = c.get("/").text
+    assert "__CURSOR__" not in t and "__VSCODE__" not in t
+    ln = c.get("/api/public/config").json()["install"]
+    cfg = parse_qs(urlsplit(ln["cursor"]).query)
+    assert ln["cursor"].startswith("cursor://anysphere.cursor-deeplink/mcp/")
+    assert cfg["name"] == ["jobmcp"]
+    assert json.loads(base64.b64decode(cfg["config"][0])) == {
+        "url": config.PUBLIC_MCP_URL
+    }
+    assert ln["cursor"] in t
+    v = json.loads(unquote(ln["vscode"].split("?", 1)[1]))
+    assert ln["vscode"].startswith("vscode:mcp/install?")
+    assert v == {
+        "name": "jobmcp",
+        "type": "http",
+        "url": config.PUBLIC_MCP_URL,
+    }
+    assert ln["vscode"] in t

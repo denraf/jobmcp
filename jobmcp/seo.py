@@ -39,6 +39,7 @@ PRIVATE_PAGES = (
     "/verify",
     "/forgot",
     "/reset",
+    "/oauth/authorize",
 )
 # Crawlers of the search engines and of the AI assistants. Named one by one so
 # the intent is on record; each group repeats the rules, because a crawler that
@@ -365,6 +366,7 @@ def job_page(ref: str):
 def robots_txt() -> str:
     rules = [
         "Allow: /",
+        "Disallow: /oauth/",
         "Disallow: /api/",
         "Disallow: /mcp",
         "Disallow: /metrics",
@@ -392,7 +394,7 @@ def llms_txt() -> str:
 ## Connecting an agent
 
 - MCP endpoint (streamable HTTP): {config.PUBLIC_MCP_URL}
-- Authentication: a personal token created in the user's portal after a free sign-up. Works with Claude, Codex, Gemini CLI and any assistant that can connect to an MCP server.
+- Authentication: OAuth sign-in (the agent discovers it from the endpoint). The user enters their email on the approval page, opens the emailed link, which creates a free account if needed, and approves. A personal token from the portal also works. Works with Claude, Codex, Gemini CLI and any assistant that can connect to an MCP server.
 - Tools search jobs, show a posting, claim a job, and record whether it was applied to, skipped or failed.
 
 ## Optional

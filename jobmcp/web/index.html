@@ -22,7 +22,7 @@
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Organization", "name": "jobmcp", "url": "__BASE__/"}</script>
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "jobmcp", "url": "__BASE__/"}</script>
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "jobmcp", "url": "__BASE__/", "applicationCategory": "BusinessApplication", "operatingSystem": "Any", "description": "jobmcp finds open jobs on company career pages and hands them to your own AI agent over MCP. It never applies for you and never asks for your résumé or contact details.", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Where does my résumé go?", "acceptedAnswer": {"@type": "Answer", "text": "Not to jobmcp. Keep it as a file your agent can read, or in your agent’s own project or memory. When your agent submits a company’s form, the résumé goes to that company, exactly as if you had applied yourself."}}, {"@type": "Question", "name": "What does jobmcp know about me?", "acceptedAnswer": {"@type": "Answer", "text": "Your email address, a hash of your password, your search preferences, the jobs you saved, and a status for each job your agent worked on. The privacy page lists everything."}}, {"@type": "Question", "name": "Can my agent apply to any job?", "acceptedAnswer": {"@type": "Answer", "text": "Only where it can complete the form. Some companies require an account or show a captcha. Your agent records those as skipped or failed, and you can open them yourself from your portal."}}, {"@type": "Question", "name": "What stops an agent from applying to hundreds of jobs?", "acceptedAnswer": {"@type": "Answer", "text": "You set a daily limit in your preferences, 20 by default. Once you reach it, jobmcp won’t let your agent start another application that day, and it never lets it apply to the same job twice."}}, {"@type": "Question", "name": "Where do the jobs come from?", "acceptedAnswer": {"@type": "Answer", "text": "From employers’ own career pages, on hiring platforms such as Greenhouse, Lever, Ashby, Workable and Workday. These are the companies’ own listings, not copies from a job board."}}, {"@type": "Question", "name": "How do I delete my data?", "acceptedAnswer": {"@type": "Answer", "text": "In your portal, open Account and choose Delete account. Your preferences, saved jobs, application record and tokens are erased immediately."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I need an account before I connect my agent?", "acceptedAnswer": {"@type": "Answer", "text": "No. Add jobmcp to your agent, type your email on the page it opens, and open the link we send you. That creates your account and connects the agent in one step. If you would rather use a password, or paste a token into an agent that can’t sign in by itself, you can do that from your portal."}}, {"@type": "Question", "name": "Where does my résumé go?", "acceptedAnswer": {"@type": "Answer", "text": "Not to jobmcp. Keep it as a file your agent can read, or in your agent’s own project or memory. When your agent submits a company’s form, the résumé goes to that company, exactly as if you had applied yourself."}}, {"@type": "Question", "name": "What does jobmcp know about me?", "acceptedAnswer": {"@type": "Answer", "text": "Your email address, a hash of your password, your search preferences, the jobs you saved, and a status for each job your agent worked on. The privacy page lists everything."}}, {"@type": "Question", "name": "Can my agent apply to any job?", "acceptedAnswer": {"@type": "Answer", "text": "Only where it can complete the form. Some companies require an account or show a captcha. Your agent records those as skipped or failed, and you can open them yourself from your portal."}}, {"@type": "Question", "name": "What stops an agent from applying to hundreds of jobs?", "acceptedAnswer": {"@type": "Answer", "text": "You set a daily limit in your preferences, 20 by default. Once you reach it, jobmcp won’t let your agent start another application that day, and it never lets it apply to the same job twice."}}, {"@type": "Question", "name": "Where do the jobs come from?", "acceptedAnswer": {"@type": "Answer", "text": "From employers’ own career pages, on hiring platforms such as Greenhouse, Lever, Ashby, Workable and Workday. These are the companies’ own listings, not copies from a job board."}}, {"@type": "Question", "name": "How do I delete my data?", "acceptedAnswer": {"@type": "Answer", "text": "In your portal, open Account and choose Delete account. Your preferences, saved jobs, application record and tokens are erased immediately."}}]}</script>
 </head>
 <body>
 <header class="site-head" id="site-head"></header>
@@ -34,7 +34,7 @@
       <h1>Your agent applies. Your résumé stays yours.</h1>
       <p class="lede">jobmcp finds open roles straight from company career pages and tells your AI agent which ones fit. It does not apply for you, and it never asks for your résumé, phone number or address. You keep those. Your agent uses them.</p>
       <div class="cta-row">
-        <a class="btn btn-stamp" id="cta-register" href="/register">Create a free account</a>
+        <a class="btn btn-stamp" id="cta-register" href="#how">Connect your agent</a>
         <a class="btn btn-quiet" href="/jobs">Browse jobs</a>
       </div>
       <p class="hero-note">Works with Claude, Codex, Gemini CLI and any assistant that can connect to an MCP server.</p>
@@ -82,8 +82,11 @@
   <div class="wrap">
     <h2 id="how">How it works</h2>
     <ol class="steps">
-      <li><div><h3>Create an account</h3><p>An email and a password. Then say what you’re looking for: job titles, places, remote or not, and the most applications you want in a day.</p></div></li>
-      <li><div><h3>Connect your agent</h3><p>Create a personal token in your portal and paste one command into Claude, Codex or Gemini. The token opens your list and nobody else’s. Revoke it whenever you like.</p></div></li>
+      <li><div><h3>Connect your agent</h3><p>Add jobmcp to Claude, Codex, Gemini or any agent that supports MCP, using the address below. Your agent opens a page where you type your email. We send you a link, and opening it creates your account and lets you approve the connection. There is no password to choose and no token to copy.</p>
+        <div class="codeblock"><pre>claude mcp add --transport http jobmcp __MCP__</pre></div>
+        <p class="install-links">Using an editor? <a class="btn btn-quiet btn-sm" href="__CURSOR__">Add to Cursor</a> <a class="btn btn-quiet btn-sm" href="__VSCODE__">Add to VS Code</a></p>
+        <p>That is the command for Claude Code. Then type <code>/mcp</code> and choose Authenticate. In Claude on the web or desktop, add a custom connector with the same address. Other agents: add a remote MCP server with that address and follow its sign-in prompt. You can disconnect it any time in your portal.</p></div></li>
+      <li><div><h3>Say what you’re looking for</h3><p>Tell your agent, or set it in your portal: job titles, places, remote or not, whether you need visa sponsorship, and the most applications you want in a day.</p></div></li>
       <li><div><h3>Ask your agent to apply</h3><p>It reads your matches, claims a job, opens the company’s form and fills it in with the résumé and details you keep on your side. It asks you about anything it doesn’t know, such as visa sponsorship, disability, gender or a company’s own questions, and never guesses. If it can’t finish a form, it skips the job and says why.</p></div></li>
       <li><div><h3>Check the record</h3><p>Every job your agent touches appears in your portal as applied, skipped or failed.</p></div></li>
     </ol>
@@ -98,6 +101,7 @@
   <div class="wrap">
     <h2 id="faq">Questions</h2>
     <div class="faq">
+      <details><summary>Do I need an account before I connect my agent?</summary><p>No. Add jobmcp to your agent, type your email on the page it opens, and open the link we send you. That creates your account and connects the agent in one step. If you would rather use a password, or paste a token into an agent that can’t sign in by itself, you can do that from your portal.</p></details>
       <details><summary>Where does my résumé go?</summary><p>Not to jobmcp. Keep it as a file your agent can read, or in your agent’s own project or memory. When your agent submits a company’s form, the résumé goes to that company, exactly as if you had applied yourself.</p></details>
       <details><summary>What does jobmcp know about me?</summary><p>Your email address, a hash of your password, your search preferences, the jobs you saved, and a status for each job your agent worked on. The <a href="/privacy">privacy page</a> lists everything.</p></details>
       <details><summary>Can my agent apply to any job?</summary><p>Only where it can complete the form. Some companies require an account or show a captcha. Your agent records those as skipped or failed, and you can open them yourself from your portal.</p></details>
@@ -111,7 +115,7 @@
 <div class="band">
   <div class="wrap">
     <h2>Find the jobs. Keep your details.</h2>
-    <a class="btn btn-stamp" href="/register">Create a free account</a>
+    <a class="btn btn-stamp" href="#how">Connect your agent</a>
   </div>
 </div>
 

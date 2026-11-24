@@ -503,7 +503,15 @@ class BearerAuth:
                     "status": 401,
                     "headers": [
                         (b"content-type", b"application/json"),
-                        (b"www-authenticate", b"Bearer"),
+                        # RFC 9728: how a client finds out where to sign in
+                        (
+                            b"www-authenticate",
+                            (
+                                'Bearer resource_metadata="'
+                                f"{config.PUBLIC_BASE_URL}"
+                                '/.well-known/oauth-protected-resource"'
+                            ).encode(),
+                        ),
                     ],
                 }
             )

@@ -56,6 +56,12 @@ SYNC_AFTER_REFRESH = os.environ.get("JOBMCP_SYNC_AFTER_REFRESH", "1") not in (
 # A board whose endpoint says 404/gone this many syncs in a row is disabled.
 GONE_DISABLE_AFTER = int(os.environ.get("JOBMCP_GONE_DISABLE_AFTER", "3"))
 MAX_BACKOFF_MIN = 24 * 60
+# Agents that sign in themselves (OAuth) get a short access token and a
+# refresh token that is replaced each time it is used.
+OAUTH_ACCESS_TTL_MIN = int(os.environ.get("JOBMCP_OAUTH_ACCESS_TTL_MIN", "60"))
+OAUTH_REFRESH_TTL_DAYS = int(
+    os.environ.get("JOBMCP_OAUTH_REFRESH_TTL_DAYS", "90")
+)
 SESSION_TTL_HOURS = int(os.environ.get("JOBMCP_SESSION_TTL_HOURS", "24"))
 DEFAULT_DAILY_APPLY_CAP = int(os.environ.get("JOBMCP_DAILY_APPLY_CAP", "20"))
 ALLOW_REGISTRATION = os.environ.get("JOBMCP_ALLOW_REGISTRATION", "1") not in (
@@ -101,6 +107,7 @@ VERIFY_TTL_HOURS = int(os.environ.get("JOBMCP_VERIFY_TTL_HOURS", "24"))
 RESET_TTL_MINUTES = int(os.environ.get("JOBMCP_RESET_TTL_MINUTES", "60"))
 # Minimum gap between emails of the same kind to one address (stops
 # mail-bombing through the forms).
+MAGIC_TTL_MINUTES = int(os.environ.get("JOBMCP_MAGIC_TTL_MINUTES", "30"))
 EMAIL_COOLDOWN_SECONDS = int(
     os.environ.get("JOBMCP_EMAIL_COOLDOWN_SECONDS", "60")
 )

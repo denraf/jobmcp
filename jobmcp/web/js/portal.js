@@ -39,10 +39,37 @@ const head = (title, lede) => [h('h1', { text: title }), lede ? h('p', { class: 
 // ───────────────── connect ─────────────────
 let freshToken = '';
 async function connect() {
-  const tokens = await api('/me/mcp-tokens');
+  const [tokens, apps] = await Promise.all([api('/me/mcp-tokens'), api('/me/connected-apps')]);
   const wrap = h('div');
   wrap.append(...head('Connect your agent',
-    'Your agent gets a personal token that opens your matches and your application record. It never needs your résumé or contact details to talk to jobmcp.'));
+    'Your agent signs in to your account and gets your matches and your application record. It never needs your résumé or contact details to talk to jobmcp.'));
+
+  // recommended: the agent signs itself in, nothing to copy
+  const mcpUrl = cfg.mcp_url || (location.origin + '/mcp/');
+  const signIn = h('section', { class: 'block' }, h('h2', { text: 'Sign in from your agent' }),
+    h('p', { text: 'Give your agent the address below. When it asks to sign in, a page on this site opens and you approve it. There is no token to copy, and an agent that is not connected yet can start from nothing but this address.' }),
+    h('div', { class: 'codeblock' }, h('pre', { text: mcpUrl }), copyButton(() => mcpUrl, 'Copy address')),
+    cfg.install ? h('p', { class: 'install-links' }, 'Using an editor? ',
+      ...[['Add to Cursor', cfg.install.cursor], ['Add to VS Code', cfg.install.vscode]].map(([label, href]) => {
+        const a = h('a', { class: 'btn btn-quiet btn-sm', text: label });
+        a.setAttribute('href', href);  // an app link (cursor:, vscode:), which h() rightly refuses; it comes from our own config
+        return a;
+      })) : null,
+    h('p', { class: 'hint', text: `Claude Code: run  claude mcp add --transport http jobmcp ${mcpUrl}  then /mcp and choose Authenticate. Claude on the web or desktop: Settings, Connectors, Add custom connector. Other agents: add a remote MCP server with this address and follow its sign-in prompt.` }));
+  const appBody = h('tbody');
+  for (const a of apps) {
+    const off = h('button', { class: 'btn btn-danger btn-sm', type: 'button', text: 'Disconnect' });
+    off.addEventListener('click', async () => {
+      if (!confirm(`Disconnect “${a.name}”? It stops working immediately.`)) return;
+      try { await api(`/me/connected-apps/${a.id}`, { method: 'DELETE' }); toast('Disconnected'); route(); }
+      catch (ex) { toast(ex.message, true); }
+    });
+    appBody.append(h('tr', {}, h('td', { text: a.name }), h('td', { class: 'muted', text: 'Connected ' + ago(a.created_at) }),
+      h('td', { class: 'muted', text: a.last_used_at ? 'Used ' + ago(a.last_used_at) : 'Not used yet' }),
+      h('td', {}, h('div', { class: 'row-actions' }, off))));
+  }
+  if (apps.length) signIn.append(h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ...['Connected app', '', 'Last used', ''].map((x) => h('th', { text: x })))), appBody));
+  wrap.append(signIn);
 
   // step 1: token
   const tokenArea = h('div');
@@ -65,7 +92,7 @@ async function connect() {
       h('strong', { class: 'ui', text: 'Copy your token now. It’s shown only once.' }),
       h('code', { text: freshToken }), h('div', {}, copyButton(() => freshToken, 'Copy token'))));
   }
-  wrap.append(h('section', { class: 'block' }, h('h2', { text: '1. Create a token' }), tokenArea));
+  wrap.append(h('section', { class: 'block' }, h('h2', { text: 'Or use a token: 1. Create a token' }), tokenArea));
 
   // step 2: client snippets
   const url = cfg.mcp_url || (location.origin + '/mcp/');

@@ -51,6 +51,28 @@ def reset(to: str, token: str) -> Mail:
     )
 
 
+def magic(to: str, token: str, next_path: str, app: str, host: str) -> Mail:
+    mins = config.MAGIC_TTL_MINUTES
+    sep = "&" if "?" in next_path else "?"
+    link = f"{config.PUBLIC_BASE_URL}{next_path}{sep}magic={quote(token)}"
+    return Mail(
+        to,
+        "Connect your agent to jobmcp",
+        (
+            f'An app called "{app}" (it will send you back to {host}) '
+            "asked to use your jobmcp account. If that was you, open this "
+            "link to sign in (your account is created if you don't have "
+            "one) and approve it:\n\n"
+            f"{link}\n\n"
+            f"The link works once and expires in {mins} minutes. You get to "
+            "approve or refuse before anything is shared.\n"
+            "If you didn't start this, ignore this email and nothing will "
+            "happen.\n" + SIGNOFF
+        ),
+        "magic",
+    )
+
+
 def already_registered(to: str) -> Mail:
     return Mail(
         to,

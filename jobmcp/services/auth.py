@@ -149,6 +149,8 @@ def list_tokens(
     )
     if kind:
         q = q.where(ApiToken.kind == kind)
+    # tokens an agent got by signing in are shown as connected apps instead
+    q = q.where(ApiToken.grant_id.is_(None))
     return list(s.scalars(q.order_by(ApiToken.id)))
 
 
@@ -319,6 +321,37 @@ def verify_email(s: Session, raw: str) -> None:
     u = _consume(s, raw, "verify")
     if u.email_verified_at is None:
         u.email_verified_at = utcnow()
+
+
+def magic_link(
+    s: Session, email: str, next_path: str, app: str, host: str
+) -> list[Mail]:
+    """Sign in, or sign up, with nothing but an email address: the link in the
+    mail is the credential. Used when an agent sends someone to approve it, so
+    they need no form and no password. The caller answers the same whether or
+    not a mail goes out."""
+    email = email.strip().lower()
+    if "@" not in email or len(email) > 255 or any(c.isspace() for c in email):
+        raise ServiceError("invalid email")
+    u = s.scalar(select(User).where(User.email == email))
+    if u is None:
+        if not config.ALLOW_REGISTRATION:
+            return []
+        # no password: the account is entered through emailed links until the
+        # owner chooses one ("forgot password")
+        u = create_user(s, email, secrets.token_urlsafe(32), verified=False)
+    elif not u.is_active:
+        return []
+    raw = _issue(s, u, "magic", timedelta(minutes=config.MAGIC_TTL_MINUTES))
+    return [emails.magic(u.email, raw, next_path, app, host)] if raw else []
+
+
+def consume_magic(s: Session, raw: str) -> User:
+    """Opening the emailed link proves the address, so it also confirms it."""
+    u = _consume(s, raw, "magic")
+    if u.email_verified_at is None:
+        u.email_verified_at = utcnow()
+    return u
 
 
 def resend_verification(s: Session, email: str) -> list[Mail]:

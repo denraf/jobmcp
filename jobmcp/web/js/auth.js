@@ -50,6 +50,7 @@ $('#form').addEventListener('submit', async (e) => {
       return;
     }
     lastEmail = email;  // registration: the account exists only once the emailed link is opened
+    try { localStorage.setItem('lj_resume', next); } catch { /* the link then goes to a plain sign-in */ }
     $('#sent-to').textContent = email;
     $('#form').hidden = true;
     $('#page-title').hidden = true;

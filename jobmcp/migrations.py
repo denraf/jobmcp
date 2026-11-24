@@ -34,6 +34,7 @@ def is_current() -> bool:
         and "sort_at" in {c["name"] for c in insp.get_columns("jobs")}
         and {c for c, _ in SALARY_COLUMNS}
         <= {c["name"] for c in insp.get_columns("jobs")}
+        and "grant_id" in {c["name"] for c in insp.get_columns("api_tokens")}
         and "visa" in {c["name"] for c in insp.get_columns("jobs")}
         and "visa" in {c["name"] for c in insp.get_columns("preferences")}
         and set(FULLTEXT_INDEXES)
@@ -113,6 +114,7 @@ def ensure_schema() -> list[str]:
     changed += _sort_column(eng)
     changed += _salary_columns(eng)
     changed += _visa_column(eng)
+    changed += _oauth_columns(eng)
     changed += _filter_indexes(eng)
     changed += _fulltext_indexes(eng)
     for name in changed:
@@ -222,6 +224,24 @@ def backfill_job_salaries(eng, batch: int = 500) -> int:
                 )
                 found += len(params)
         last = rows[-1].id
+
+
+def _oauth_columns(eng) -> list[str]:
+    """api_tokens.grant_id: which OAuth approval an access token belongs to."""
+    if "grant_id" in {
+        c["name"] for c in inspect(eng).get_columns("api_tokens")
+    }:
+        return []
+    with eng.begin() as c:
+        c.execute(
+            text("ALTER TABLE api_tokens ADD COLUMN grant_id BIGINT NULL")
+        )
+        c.execute(
+            text(
+                "CREATE INDEX ix_api_tokens_grant_id ON api_tokens (grant_id)"
+            )
+        )
+    return ["api_tokens.grant_id"]
 
 
 def _visa_column(eng) -> list[str]:

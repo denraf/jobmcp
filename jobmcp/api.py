@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import db
+from . import db, install
 from . import cache, config, mailer, metrics, salary
 from .ratelimit import auth_limit, client_ip
 from .security import hash_token
@@ -31,6 +31,7 @@ from .services import (
     boards,
     imports,
     matching,
+    oauth,
     prefs,
     saved,
     search,
@@ -376,6 +377,126 @@ def delete_mcp_token(token_id: int, u: Me, s: Sess):
     auth.revoke_token(s, u, token_id)
 
 
+# ── user: agents that signed themselves in (OAuth) ──────────────────────
+class AuthorizeParams(BaseModel):
+    client_id: str = ""
+    redirect_uri: str = ""
+    response_type: str = ""
+    code_challenge: str = ""
+    code_challenge_method: str = ""
+    state: str = ""
+    resource: str | None = None
+
+
+class Decision(AuthorizeParams):
+    approve: bool = False
+
+
+def _oauth_refusal(e: oauth.OAuthError) -> ServiceError:
+    return ServiceError(e.description or e.error, 400)
+
+
+@app.get("/oauth/request", dependencies=[Depends(auth_limit)])
+def oauth_request(
+    s: Sess,
+    client_id: str = "",
+    redirect_uri: str = "",
+    response_type: str = "",
+    code_challenge: str = "",
+    code_challenge_method: str = "",
+    resource: str | None = None,
+):
+    """What the approval page shows: who is asking. Needs no sign-in, so the
+    page can say so before it sends the visitor to sign in or sign up."""
+    from urllib.parse import urlsplit
+
+    try:
+        c = oauth.check_authorize(
+            s,
+            dict(
+                client_id=client_id,
+                redirect_uri=redirect_uri,
+                response_type=response_type,
+                code_challenge=code_challenge,
+                code_challenge_method=code_challenge_method,
+                resource=resource,
+            ),
+        )
+    except oauth.OAuthError as e:
+        raise _oauth_refusal(e) from None
+    u = urlsplit(redirect_uri)
+    # the name is whatever the app called itself: show where it will go too
+    return {"name": c.name, "sends_you_to": u.netloc or u.scheme + "://"}
+
+
+class EmailLink(AuthorizeParams):
+    email: str
+
+
+@app.post(
+    "/oauth/email-link", status_code=202, dependencies=[Depends(auth_limit)]
+)
+def oauth_email_link(body: EmailLink, s: Sess):
+    """Sign in or sign up by email from the approval page: mails a one-time
+    link that returns to this same request, so the visitor fills in no form.
+    The request is validated first so the mail can't be used to send arbitrary
+    text to arbitrary people."""
+    from urllib.parse import urlencode, urlsplit
+
+    p = body.model_dump(exclude={"email"})
+    try:
+        c = oauth.check_authorize(s, p)
+    except oauth.OAuthError as e:
+        raise _oauth_refusal(e) from None
+    host = urlsplit(body.redirect_uri)
+    nxt = "/oauth/authorize?" + urlencode({k: v for k, v in p.items() if v})
+    _deliver(
+        s,
+        auth.magic_link(
+            s, body.email, nxt, c.name[:60], host.netloc or host.scheme + "://"
+        ),
+    )
+    metrics.AUTH_EVENTS.labels("magic_requested").inc()
+    log.info("email sign-in link requested", extra={"client": c.id})
+    return CHECK_EMAIL
+
+
+@app.post("/auth/magic", dependencies=[Depends(auth_limit)])
+def magic_sign_in(body: TokenBody, s: Sess):
+    """Exchange the emailed link's token for a session."""
+    u = auth.consume_magic(s, body.token)
+    raw, t = auth.issue_token(s, u, "session", name="email link")
+    metrics.AUTH_EVENTS.labels("magic_login").inc()
+    log.info("login by email link", extra={"user_id": u.id})
+    return {"token": raw, "expires_at": t.expires_at, "user": user_out(u)}
+
+
+@app.post("/oauth/decision")
+def oauth_decision(body: Decision, u: Me, s: Sess):
+    """The signed-in user's answer. Returns the address to send the browser
+    to (the app's redirect with a one-time code, or the refusal)."""
+    try:
+        to = oauth.approve(s, u, body.model_dump(), body.approve)
+    except oauth.OAuthError as e:
+        raise _oauth_refusal(e) from None
+    log.info(
+        "oauth %s",
+        "approved" if body.approve else "denied",
+        extra={"user_id": u.id, "client": body.client_id},
+    )
+    return {"redirect_to": to}
+
+
+@app.get("/me/connected-apps")
+def connected_apps(u: Me, s: Sess):
+    return oauth.list_grants(s, u)
+
+
+@app.delete("/me/connected-apps/{grant_id}", status_code=204)
+def disconnect_app(grant_id: int, u: Me, s: Sess):
+    oauth.revoke_for_user(s, u, grant_id)
+
+
 # ── user: jobs & applications ───────────────────────────────────────────
 @app.get("/me/matches")
 def my_matches(
@@ -520,6 +641,7 @@ def public_config():
     return {
         "registration_open": config.ALLOW_REGISTRATION,
         "mcp_url": config.PUBLIC_MCP_URL,
+        "install": install.links(config.PUBLIC_MCP_URL),
         "vendors": sorted(VENDORS),
     }
 

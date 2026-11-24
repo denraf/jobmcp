@@ -113,7 +113,72 @@ class ApiToken(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
+    # Set on the short-lived access tokens an agent obtains by signing in
+    # (OAuth, see services/oauth.py): the approval they belong to. Such
+    # tokens are not listed with the ones a person copies by hand.
+    grant_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class OAuthClient(Base):
+    """An agent application that registered itself (RFC 7591). Public client:
+    it has no secret, PKCE protects its codes."""
+
+    __tablename__ = "oauth_clients"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), default="")
+    redirect_uris: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class OAuthGrant(Base):
+    """One approval: this user let this client use their jobmcp account. The
+    unit the user sees and can revoke."""
+
+    __tablename__ = "oauth_grants"
+    id: Mapped[int] = mapped_column(PK, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    client_id: Mapped[str] = mapped_column(
+        ForeignKey("oauth_clients.id", ondelete="CASCADE")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+
+
+class OAuthCode(Base):
+    """A one-time authorization code, valid for a minute. Stored hashed."""
+
+    __tablename__ = "oauth_codes"
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    grant_id: Mapped[int] = mapped_column(
+        ForeignKey("oauth_grants.id", ondelete="CASCADE")
+    )
+    redirect_uri: Mapped[str] = mapped_column(String(500))
+    code_challenge: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class OAuthRefresh(Base):
+    """A refresh token, stored hashed. Each use hands out a new one; using an
+    old one again means it leaked, so the whole grant is revoked."""
+
+    __tablename__ = "oauth_refresh"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    grant_id: Mapped[int] = mapped_column(
+        ForeignKey("oauth_grants.id", ondelete="CASCADE"), index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Preferences(Base):
