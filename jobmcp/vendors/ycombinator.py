@@ -7,8 +7,10 @@ from __future__ import annotations
 import json
 import re
 from html import unescape
+from functools import partial
 from urllib.parse import urljoin
 
+from .. import config, http
 from ..models import Job
 from .base import SoftBlocked, Vendor, valid_slug
 from .detail import enrich, get_page, page_detail
@@ -19,6 +21,18 @@ PAGE = re.compile(
     re.S,
 )
 HOSTS = ("www.ycombinator.com", "ycombinator.com")
+DETAIL_PER_RUN = 60  # at one page every couple of seconds, a couple of minutes
+
+# One gate for the whole host: the list pages and the posting pages of every
+# company are spaced out together, and when the site answers 429 all the
+# threads pause together (honoring Retry-After) instead of each retrying on
+# its own timer.
+GATE = http.Gate(
+    "ycombinator.com",
+    min_interval=config.YC_MIN_INTERVAL,
+    max_cooldown=120.0,
+    trip_after=8,  # blocked, not busy: stop and retry next sync
+)
 
 
 class YCombinator(Vendor):
@@ -55,7 +69,7 @@ class YCombinator(Vendor):
 
     def fetch(self, board, previous=None):
         base = f"https://www.ycombinator.com/companies/{board}/jobs"
-        parsed = self.parse_list(get_page(base, board))
+        parsed = self.parse_list(get_page(base, board, gate=GATE))
         if parsed is None:
             raise SoftBlocked(f"{board}: no openings data in the page")
         company, items = parsed
@@ -74,4 +88,9 @@ class YCombinator(Vendor):
                     url=url,
                 )
             )
-        return enrich(listed, previous, page_detail)
+        return enrich(
+            listed,
+            previous,
+            partial(page_detail, gate=GATE),
+            per_run=DETAIL_PER_RUN,
+        )

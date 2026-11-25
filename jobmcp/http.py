@@ -166,7 +166,7 @@ def request(
                 )
                 time.sleep(wait)
                 continue
-            if gate:
+            if gate and r.status_code != 429:  # still throttled: stay cautious
                 gate.ok()
             return r
         except requests.RequestException as e:

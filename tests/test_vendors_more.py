@@ -773,7 +773,19 @@ def test_ycombinator(monkeypatch):
         monkeypatch,
         [("jobs/x1-engineer", html(POSTING)), ("/jobs", html(page))],
     )
+    seen = []
+    real = http.get
+
+    def spy(url, **kw):
+        seen.append(kw.get("gate"))
+        return real(url, **kw)
+
+    monkeypatch.setattr(http, "get", spy)
     [j] = VENDORS["ycombinator"].fetch("ambient-ai")
+    # the list page and the posting page both go through the host's one gate
+    from jobmcp.vendors.ycombinator import GATE
+
+    assert len(seen) == 2 and all(g is GATE for g in seen)
     assert (
         j.url
         == "https://www.ycombinator.com/companies/ambient-ai/jobs/x1-engineer"

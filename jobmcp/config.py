@@ -45,6 +45,9 @@ TASK_STALE_MIN = int(os.environ.get("JOBMCP_TASK_STALE_MIN", "5"))
 # Seconds between requests to one Workday pod (all employers on wd1 share
 # it): Workday answers 429 to anything faster from one address.
 WORKDAY_MIN_INTERVAL = float(os.environ.get("JOBMCP_WORKDAY_INTERVAL", "0.7"))
+# Seconds between requests to ycombinator.com (the list page and every
+# posting page share it): it answers 429 to anything faster from one address.
+YC_MIN_INTERVAL = float(os.environ.get("JOBMCP_YC_INTERVAL", "2.0"))
 SYNC_WORKERS = int(os.environ.get("JOBMCP_SYNC_WORKERS", "16"))
 # Start syncing newly discovered boards as soon as a Common Crawl refresh
 # finishes, instead of at the next hourly run.
